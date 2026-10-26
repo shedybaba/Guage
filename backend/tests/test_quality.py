@@ -133,6 +133,41 @@ def test_picks_the_better_phrase_when_the_first_is_poor():
     assert r.phrase == "metal ball" and r.status == "ok"
 
 
+def test_gap_only_goes_straight_to_box_without_trying_another_name():
+    pts = [p for p in good() if not 80 <= p.frame <= 119]
+    t = FakeTracker({"ball": pts, "metal ball": good()},
+                    lambda f, b, d: [pt(x, "0") for x in range(79, N)])
+    r = run(t, ["ball", "metal ball"])
+    assert r.status == "ok" and r.phrase == "ball"
+    assert t.phrase_calls == ["ball"]  # the second name was never requested (no cost)
+    assert len(t.box_calls) == 1
+    assert any("would not help" in e.message for e in r.log)
+
+
+def test_low_confidence_tries_another_name_and_not_a_box():
+    poor = [pt(f, conf=0.2 if 40 <= f < 120 else 0.95) for f in range(N)]
+    t = FakeTracker({"bob": poor, "metal ball": good()})
+    r = run(t, ["bob", "metal ball"])
+    assert t.phrase_calls == ["bob", "metal ball"] and t.box_calls == []
+    assert r.phrase == "metal ball"
+
+
+def test_jump_tries_another_name():
+    jumpy = [pt(f, x=(900 if f == 100 else None)) for f in range(N)]
+    t = FakeTracker({"ball": jumpy, "red ball": good()})
+    r = run(t, ["ball", "red ball"])
+    assert t.phrase_calls == ["ball", "red ball"] and r.phrase == "red ball" and r.status == "ok"
+
+
+def test_gap_and_low_confidence_try_a_name_then_fix_the_gap_with_a_box():
+    both = [pt(f, conf=0.2 if 150 <= f < 160 else 0.95) for f in range(N) if not 40 <= f <= 59]
+    t = FakeTracker({"ball": both, "red ball": [p for p in good() if not 40 <= p.frame <= 59]},
+                    lambda f, b, d: [pt(x, "0") for x in range(39, N)])
+    r = run(t, ["ball", "red ball"])
+    assert t.phrase_calls == ["ball", "red ball"]  # low confidence justified the second name
+    assert r.phrase == "red ball" and len(t.box_calls) == 1 and r.status == "ok"
+
+
 def test_box_reacquire_fills_a_gap_from_the_last_good_frame():
     pts = [p for p in good() if not 80 <= p.frame <= 119]
 

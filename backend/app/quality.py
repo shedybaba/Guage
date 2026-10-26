@@ -2,11 +2,17 @@
 
 After SAM tracks an object we check the result before measuring anything:
 missing frames (gaps), low confidence, jumps, and identity switches. If the
-track is not good we retry in a fixed order:
+track is not good we pick the fix that matches the problem:
 
-  (a) try another noun phrase for the same object,
-  (b) re-acquire the object with a box prompt from the last good frame,
-  (c) give up gracefully and say what went wrong and how to film it better.
+  zero matches, low confidence, jumps -> (a) try another noun phrase,
+  missing frames (a gap)              -> (b) re-acquire the object with a box
+                                         prompt from the last good frame,
+  anything left over                  -> (c) give up gracefully and say what
+                                         went wrong and how to film it better.
+
+A gap means the object was hidden or blurred, so another name cannot see
+through it, while a box prompt keeps following the very same object (same
+mask, same centroid). Mixing names inside one track could shift the centroid.
 
 Every step is written to a plain-language log that the UI shows as
 "How Gauge checked its work". Nothing here changes a measurement: it only
@@ -23,6 +29,7 @@ MIN_LOW_CONF_RUN = 3
 JUMP_FACTOR = 4.0  # a step more than 4x the median step ...
 JUMP_MIN_DIAGONALS = 0.5  # ... and more than half the object's size is a jump
 MAX_MERGE_GAP_FRAMES = 30
+NAME_FIXABLE = ("low_confidence", "jump")  # problems another noun phrase can fix; gaps need a box prompt
 
 
 @dataclass
@@ -233,7 +240,10 @@ async def track_with_checks(tracker, phrases, total_frames, *, max_phrases=3, ma
         score = _score(points, total_frames)
         if best is None or score > best[0]:
             best = (score, phrase, points, issues)
-        if not issues:
+        if not any(i["kind"] in NAME_FIXABLE for i in issues):
+            if issues and n + 1 < len(phrases[:max_phrases]):
+                log.append(LogEntry("check", "Only frames are missing (the object was hidden), so another "
+                                    "name would not help; going straight to re-acquiring it.", ok=None))
             break
 
     if best is None:
