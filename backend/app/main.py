@@ -100,6 +100,13 @@ class SamTrackerFactory:
                               on_progress=on_progress)
 
 
+class NoKeyClient:
+    """Stands in for the model client when the key is missing; any use raises, and the job fails with a plain message."""
+
+    def __getattr__(self, name):
+        raise RuntimeError("MODEL_API_KEY is missing.")
+
+
 class ImmutableAssets(StaticFiles):
     """Built assets have a hash in their name, so a browser may keep them forever."""
 
@@ -131,7 +138,12 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
         else:
             from .llm import SparkLLM
             from .meta_client import async_client
-            app.state.runner = JobRunner(app.state.store, data_dir, SparkLLM(async_client()),
+            try:
+                model_client = async_client()
+            except RuntimeError:  # no MODEL_API_KEY: stay up so /api/health can say so, and fail questions plainly
+                log.error("MODEL_API_KEY is not set: the site will run, but every question will fail until it is.")
+                model_client = NoKeyClient()
+            app.state.runner = JobRunner(app.state.store, data_dir, SparkLLM(model_client),
                                          SamTrackerFactory(app.state.store, data_dir), limits=limits_from_env())
         yield
         await app.state.runner.shutdown()

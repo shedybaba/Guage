@@ -366,3 +366,17 @@ def test_the_app_cannot_be_used_to_read_files_outside_its_folder(site):
 def test_without_a_built_frontend_the_api_still_runs(client):
     assert client.get("/api/health").status_code == 200
     assert client.get("/").status_code == 404
+
+
+def test_the_server_starts_without_a_model_key_and_fails_questions_plainly(tmp_path, monkeypatch, clip_bytes):
+    """A missing MODEL_API_KEY on a new deployment must not crash the server: health says so, questions fail with a clear message."""
+    monkeypatch.setenv("MODEL_API_KEY", "")
+    monkeypatch.setattr(sam, "DATA_DIR", tmp_path)
+    app = create_app(store=Store(tmp_path / "t.sqlite3"), data_dir=tmp_path, frontend_dir=tmp_path / "no-frontend")
+    with TestClient(app, raise_server_exceptions=False) as c:
+        assert c.get("/api/health").json()["api_key_configured"] is False
+        vid = upload(c, clip_bytes).json()["video_id"]
+        job = c.post(f"/api/videos/{vid}/questions", json={"question": "What is the swing period?"}).json()["job_id"]
+        j = wait(c, job)
+        assert j["status"] == "failed"
+        assert "MODEL_API_KEY" not in str(j)  # the user is not shown configuration details
