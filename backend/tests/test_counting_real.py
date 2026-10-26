@@ -3,54 +3,12 @@
 They run only on a machine that has the clips in samples/ and the cached SAM tracking in data/
 (neither is committed: videos are never pushed). Run scripts/counting_demo.py once to create the cache.
 """
-import asyncio
-from pathlib import Path
-
 import pytest
 
-from app import sam, signals, video
-from app.quality import track_objects_with_checks
+from app import signals
+from tests.real_clips import load
 from app.tools.counting import count_objects, line_crossings
 from app.tools.pendulum import pendulum_period
-
-SAMPLES = Path(__file__).resolve().parents[2] / "samples"
-
-
-class CacheTracker:
-    """Plays back cached SAM results, so the real quality loop runs with no network and no cost."""
-
-    def __init__(self, key, size):
-        self.key, self.size = key, size
-
-    async def track_phrase(self, phrase):
-        res = sam.load_cached(self.key, phrase)
-        if res is None:
-            raise LookupError(phrase)
-        res.cached = True
-        return res
-
-    async def track_boxes(self, prompts, direction="forward"):
-        res = sam.load_cached(self.key, f"boxes|{direction}|{sam.boxes_prompt_text(prompts, self.size)}")
-        if res is None:
-            raise LookupError("box request")
-        res.cached = True
-        return res
-
-
-def load(clip, phrase):
-    """Tracks of a real clip as the quality loop produces them (from the cache), plus the video info."""
-    path = SAMPLES / clip
-    if not path.exists():
-        pytest.skip(f"{clip} is not on this machine")
-    info = video.probe(path)
-    size = (info.width, info.height)
-    try:
-        r = asyncio.run(track_objects_with_checks(CacheTracker(sam.video_key(path), size), [phrase],
-                                                  info.frame_count, size, check_camera=False))
-    except LookupError:
-        pytest.skip(f"no cached SAM tracking for {clip} (run scripts/counting_demo.py once)")
-    return r.tracks, info
-
 
 def test_counts_the_seven_balls_of_the_cradle():
     tracks, info = load("newtons_cradle.mp4", "steel ball")
