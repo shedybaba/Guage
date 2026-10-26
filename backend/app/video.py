@@ -44,7 +44,7 @@ def probe(path) -> VideoInfo:
 
     raw = _run(["ffprobe", "-v", "error", "-select_streams", "v:0",
                 "-show_entries", "frame=best_effort_timestamp_time", "-of", "csv=p=0", str(path)])
-    ts = sorted(float(v) for v in raw.split() if v.strip() not in ("", "N/A"))
+    ts = sorted(float(v) for v in raw.replace(",", " ").split() if v != "N/A")
     if len(ts) < 2:
         raise ValueError("Could not read frame timestamps from this video.")
     duration = ts[-1] - ts[0]
