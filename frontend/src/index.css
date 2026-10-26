@@ -1,0 +1,60 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --color-paper: #f5f2ea;
+  --color-paper-2: #ece7da;
+  --color-card: #fbf9f4;
+  --color-ink: #17211f;
+  --color-ink-soft: #52605b;
+  --color-line: #d8d1bf;
+  --color-accent: #0e6a60;
+  --color-accent-strong: #0a524a;
+  --color-accent-soft: #d9ece8;
+  --color-copper: #b4561b;
+  --color-copper-soft: #f4e3d6;
+  --color-ok: #2f7d4a;
+  --color-bad: #a8321f;
+  --color-bad-soft: #f6dfda;
+}
+
+html { background: var(--color-paper); }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-paper);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 4px; }
+
+/* graph paper, for the hero and empty states */
+.graph-paper {
+  background-image:
+    linear-gradient(to right, rgba(23, 33, 31, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(23, 33, 31, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+/* a ruler's tick marks */
+.ruler {
+  height: 7px;
+  background-image:
+    repeating-linear-gradient(90deg, var(--color-ink) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(90deg, var(--color-ink) 0 1px, transparent 1px 40px);
+  background-size: 100% 4px, 100% 7px;
+  background-repeat: no-repeat;
+  background-position: left bottom, left bottom;
+  opacity: 0.55;
+}
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 0.35s ease-out both; }
+@keyframes pulse-dot { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+.pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .rise, .pulse-dot { animation: none; }
+}

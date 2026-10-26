@@ -26,6 +26,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import config, sam, video
@@ -97,9 +98,22 @@ class SamTrackerFactory:
                               on_progress=on_progress)
 
 
-def create_app(store=None, runner=None, data_dir=None):
-    """Build the app. Tests pass a store and a runner with fake model and tracker; production passes nothing."""
+class ImmutableAssets(StaticFiles):
+    """Built assets have a hash in their name, so a browser may keep them forever."""
+
+    def file_response(self, *args, **kwargs):
+        r = super().file_response(*args, **kwargs)
+        r.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return r
+
+
+def create_app(store=None, runner=None, data_dir=None, frontend_dir=None):
+    """Build the app. Tests pass a store and a runner with fake model and tracker; production passes nothing.
+
+    If the frontend has been built (frontend/dist), the same server serves it, so there is one address and no CORS.
+    """
     data_dir = Path(data_dir or config.DATA_DIR)
+    frontend = Path(frontend_dir or os.getenv("GAUGE_FRONTEND_DIST") or config.ROOT / "frontend" / "dist")
 
     @asynccontextmanager
     async def lifespan(app):
@@ -280,7 +294,8 @@ def create_app(store=None, runner=None, data_dir=None):
 
     def public_job(j):
         plan = j["plan"] or {}
-        return {"job_id": j["id"], "video_id": j["video_id"], "question": j["question"], "status": j["status"],
+        return {"job_id": j["id"], "video_id": j["video_id"], "parent_id": j["parent_id"], "question": j["question"],
+                "status": j["status"],
                 "progress": j["progress"], "message": j["message"], "created": j["created"], "updated": j["updated"],
                 "plan": {k: plan.get(k) for k in ("tool", "outputs", "interpretation", "targets", "notes", "values", "line")}
                 if plan else None,
@@ -334,6 +349,20 @@ def create_app(store=None, runner=None, data_dir=None):
         if not f.exists():
             raise HTTPException(404, "This question has no tracked data.")
         return FileResponse(f, media_type="text/csv", filename=f"gauge_{j['video_id'][:8]}_{job_id[:8]}.csv")
+
+    if (frontend / "index.html").is_file():
+        if (frontend / "assets").is_dir():
+            app.mount("/assets", ImmutableAssets(directory=frontend / "assets"), name="assets")
+
+        @app.get("/{path:path}", include_in_schema=False)
+        async def single_page_app(path: str):
+            """Any address that is not the API opens the app (so /analyze/<id> works on reload and when shared)."""
+            if path.startswith("api/") or path in ("docs", "redoc", "openapi.json"):
+                raise HTTPException(404, "Not found.")
+            candidate = (frontend / path).resolve()
+            if path and candidate.is_file() and frontend.resolve() in candidate.parents:
+                return FileResponse(candidate)
+            return FileResponse(frontend / "index.html", headers={"Cache-Control": "no-cache"})
 
     @app.exception_handler(Exception)
     async def unexpected(request: Request, exc: Exception):

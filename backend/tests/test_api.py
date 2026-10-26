@@ -22,7 +22,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(sam, "DATA_DIR", tmp_path)  # the SAM cache lives in the test folder
     store = Store(tmp_path / "t.sqlite3")
     harness = Harness(store, tmp_path)
-    app = create_app(store=store, runner=harness.runner, data_dir=tmp_path)
+    app = create_app(store=store, runner=harness.runner, data_dir=tmp_path, frontend_dir=tmp_path / "no-frontend")
     with TestClient(app, raise_server_exceptions=False) as c:
         c.harness, c.store, c.tmp = harness, store, tmp_path
         yield c
@@ -139,6 +139,7 @@ def test_a_paused_question_can_be_answered_with_units(client, video_id):
     j2 = wait(client, r.json()["job_id"])
     assert j2["status"] == "done" and any(n["id"] == "g" for n in j2["result"]["numbers"])
     assert j2["result"]["inputs"][0]["display"] == "0.5 m"  # 50 cm was converted to metres by code
+    assert j2["parent_id"] == jid and client.get(f"/api/jobs/{jid}").json()["parent_id"] is None  # the answer links back
 
 
 def test_answers_are_validated(client, video_id):
@@ -304,8 +305,64 @@ def test_a_restart_fails_jobs_that_were_in_progress(tmp_path):
     store.add_video(vid, "c.mp4", "o", "p", "k", {"fps": 30.0, "frame_count": 100, "width": 10, "height": 10, "duration": 3.0})
     stuck = store.create_job(vid, "q")
     store.update_job(stuck, status="tracking")
-    app = create_app(store=store, runner=Harness(store, tmp_path).runner, data_dir=tmp_path)
+    app = create_app(store=store, runner=Harness(store, tmp_path).runner, data_dir=tmp_path, frontend_dir=tmp_path / "no-frontend")
     with TestClient(app) as c:
         j = c.get(f"/api/jobs/{stuck}").json()
     assert j["status"] == "failed" and "restarted" in j["message"]
     store.close()
+
+
+# ------------------------------------------------------------ the frontend, served from the same address
+
+@pytest.fixture
+def site(tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>Gauge</title><div id=root></div>")
+    (dist / "assets" / "app-abc123.js").write_text("console.log('hi')")
+    (dist / "favicon.svg").write_text("<svg/>")
+    (tmp_path / "secret.txt").write_text("do not serve me")
+    store = Store(tmp_path / "s.sqlite3")
+    app = create_app(store=store, runner=Harness(store, tmp_path).runner, data_dir=tmp_path, frontend_dir=dist)
+    with TestClient(app, raise_server_exceptions=False) as c:
+        yield c
+    store.close()
+
+
+def test_the_app_opens_at_the_root_and_at_any_deep_link(site):
+    for path in ("/", "/analyze", f"/analyze/{new_id()}", "/api-docs-page", "/anything/at/all"):
+        r = site.get(path)
+        assert r.status_code == 200 and "<div id=root>" in r.text, path
+        assert r.headers["cache-control"] == "no-cache"
+
+
+def test_built_assets_are_cached_for_ever_and_other_files_are_served(site):
+    r = site.get("/assets/app-abc123.js")
+    assert r.status_code == 200 and "immutable" in r.headers["cache-control"] and "max-age=31536000" in r.headers["cache-control"]
+    assert site.get("/favicon.svg").text == "<svg/>"
+
+
+def test_every_page_of_the_app_is_reachable_on_the_production_server(site):
+    # the pages the frontend routes to: a path the API reserves would show a JSON error instead of the page
+    for path in ("/", "/analyze", f"/analyze/{new_id()}", "/developers"):
+        r = site.get(path)
+        assert r.status_code == 200 and "<div id=root>" in r.text and "detail" not in r.text, path
+
+
+def test_the_api_and_its_docs_are_never_swallowed_by_the_app(site):
+    assert site.get("/api/health").json()["status"] == "ok"
+    assert site.get("/api/nothing-here").status_code == 404
+    assert "<div id=root>" not in site.get("/api/nothing-here").text
+    assert site.get("/docs").status_code == 200 and "swagger" in site.get("/docs").text.lower()
+    assert site.get("/openapi.json").status_code == 200
+
+
+def test_the_app_cannot_be_used_to_read_files_outside_its_folder(site):
+    for path in ("/../secret.txt", "/%2e%2e/secret.txt", "/..%2fsecret.txt", "/assets/../../secret.txt"):
+        r = site.get(path)
+        assert "do not serve me" not in r.text, path
+
+
+def test_without_a_built_frontend_the_api_still_runs(client):
+    assert client.get("/api/health").status_code == 200
+    assert client.get("/").status_code == 404
