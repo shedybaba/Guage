@@ -21,3 +21,9 @@ samples/*
 .DS_Store
 
 data/
+
+# Video files are never committed (test clips live in samples/)
+*.mp4
+*.mov
+*.webm
+*.m4v

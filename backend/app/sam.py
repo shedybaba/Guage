@@ -9,9 +9,9 @@ import json
 from dataclasses import asdict, dataclass
 
 import numpy as np
-from meta_sam_parser import (SegmentationBoxRecord, SegmentationMaskRecord,
-                             decode_mask_to_raster, parse_responses_stream,
-                             video_segmentation_format)
+from meta_sam_parser import (FramePrompt, PromptBox, PromptObject, SegmentationBoxRecord,
+                             SegmentationMaskRecord, build_object_prompt, decode_mask_to_raster,
+                             parse_responses_stream, video_segmentation_format)
 
 from .config import DATA_DIR, SAM_MODEL
 
@@ -36,6 +36,7 @@ class TrackResult:
     points: list  # list[TrackPoint]
     frames_billed: int | None
     diagnostics: list
+    cached: bool = False  # True when served from the local cache (nothing was billed)
 
 
 def _mask_stats(rec: SegmentationMaskRecord):
@@ -103,32 +104,70 @@ def load_cached(key: str, phrase: str):
     return TrackResult(d["phrase"], [TrackPoint(**x) for x in d["points"]], d["frames_billed"], d["diagnostics"])
 
 
-async def track(client, file_id: str, phrase: str, key: str | None = None,
-                use_cache: bool = True) -> TrackResult:
-    """Track `phrase` through the whole video. `client` is an AsyncOpenAI for Meta.
-
-    `key` identifies the video for the cache (see video_key); it defaults to file_id.
-    """
-    key = key or file_id
-    if use_cache and (cached := load_cached(key, phrase)):
+async def _run(client, file_id: str, text: str, metadata: dict, key: str, label: str,
+               use_cache: bool = True) -> TrackResult:
+    """One streamed SAM request (phrase or box prompt) parsed into points, cached by `label`."""
+    if use_cache and (cached := load_cached(key, label)):
+        cached.cached = True
         return cached
     usage_out: dict = {}
     async with client.responses.stream(
         model=SAM_MODEL,
         input=[{"type": "message", "role": "user", "content": [
-            {"type": "input_text", "text": phrase},
+            {"type": "input_text", "text": text},
             {"type": "input_video", "file_id": file_id}]}],
-        metadata={"include_confidence": "true", "mask_encoding": "one_bit"},
+        metadata={"include_confidence": "true", "mask_encoding": "one_bit", **metadata},
     ) as stream:
         parsed = parse_responses_stream(_events(stream, usage_out), video_segmentation_format())
         final = await parsed.final_result()
 
     usage = usage_out.get("usage") or {}
     billed = usage.get("video_frames_processed") if isinstance(usage, dict) else None
-    result = TrackResult(phrase, _build_points(final.records), billed,
+    result = TrackResult(label, _build_points(final.records), billed,
                          [d.message for d in final.diagnostics])
-    p = _cache_file(key, phrase)
+    p = _cache_file(key, label)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"phrase": phrase, "points": [asdict(x) for x in result.points],
+    p.write_text(json.dumps({"phrase": label, "points": [asdict(x) for x in result.points],
                              "frames_billed": billed, "diagnostics": result.diagnostics}))
     return result
+
+
+async def track(client, file_id: str, phrase: str, key: str | None = None,
+                use_cache: bool = True) -> TrackResult:
+    """Track `phrase` through the whole video. `client` is an AsyncOpenAI for Meta.
+
+    `key` identifies the video for the cache (see video_key); it defaults to file_id.
+    """
+    return await _run(client, file_id, phrase, {}, key or file_id, phrase, use_cache)
+
+
+def box_prompt_text(frame: int, box, size) -> str:
+    """Prompt text for one box on one frame, clipped to the video's displayed size (width, height)."""
+    w, h = size
+    left, top = max(0, int(np.floor(box[0]))), max(0, int(np.floor(box[1])))
+    right, bottom = min(w, int(np.ceil(box[2]))), min(h, int(np.ceil(box[3])))
+    return build_object_prompt(size=(w, h), objects=[
+        PromptObject(id=0, prompts=[FramePrompt(frame=frame, box=PromptBox(left, top, right, bottom))])])
+
+
+async def track_box(client, file_id: str, frame: int, box, size, direction: str = "forward",
+                    key: str | None = None, use_cache: bool = True) -> TrackResult:
+    """Re-acquire an object from a box on `frame`, tracking `direction` ("forward" or "backward")."""
+    text = box_prompt_text(frame, box, size)
+    label = f"box|{direction}|{text}"
+    return await _run(client, file_id, text, {"propagation_direction": direction},
+                      key or file_id, label, use_cache)
+
+
+class SamTracker:
+    """The tracker the retry loop uses: phrase and box requests on one uploaded video."""
+
+    def __init__(self, client, file_id: str, size, key: str | None = None, use_cache: bool = True):
+        self.client, self.file_id, self.size, self.key, self.use_cache = client, file_id, size, key, use_cache
+
+    async def track_phrase(self, phrase: str) -> TrackResult:
+        return await track(self.client, self.file_id, phrase, self.key, self.use_cache)
+
+    async def track_box(self, frame: int, box, direction: str = "forward") -> TrackResult:
+        return await track_box(self.client, self.file_id, frame, box, self.size, direction,
+                               self.key, self.use_cache)
