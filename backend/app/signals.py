@@ -63,3 +63,22 @@ def quality_report(series, total_frames):
         "mean_confidence": float(valid.mean()) if len(valid) else None,
         "min_confidence": float(valid.min()) if len(valid) else None,
     }
+
+
+def positions_from_tracks(tracks, timestamps):
+    """Turn several tracked objects into the arrays the multi-object tools use.
+
+    tracks: {object id: [TrackPoint]} (for example CheckedObjects.tracks).
+    Returns (t, positions, sizes): t = time of every frame, positions = {id: (x, y)} with NaN
+    where the object was not found, sizes = {id: typical box diagonal in pixels}.
+    """
+    t = np.asarray(timestamps, float)
+    positions, sizes = {}, {}
+    for oid, pts in tracks.items():
+        x, y = np.full(len(t), np.nan), np.full(len(t), np.nan)
+        for p in pts:
+            if p.frame < len(t):
+                x[p.frame], y[p.frame] = p.cx, p.cy
+        positions[oid] = (x, y)
+        sizes[oid] = float(np.median([np.hypot(p.x2 - p.x1, p.y2 - p.y1) for p in pts]))
+    return t, positions, sizes
