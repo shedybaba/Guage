@@ -60,6 +60,7 @@ const ENDPOINTS: [string, string, string][] = [
   ['POST', '/api/jobs/{id}/answers', 'Answer a paused question.'],
   ['GET', '/api/jobs/{id}/tracks', 'The final tracks (boxes and positions per frame).'],
   ['GET', '/api/jobs/{id}/data.csv', 'The tracked data as CSV.'],
+  ['POST', '/api/transcribe', 'A spoken question (audio up to 30 s). Returns the words heard, for you to check before asking.'],
   ['GET', '/api/videos/{id}/video', 'The video, for playback (supports range requests).'],
 ]
 

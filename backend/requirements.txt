@@ -1,12 +1,12 @@
-fastapi
-uvicorn
-openai
-meta-sam-parser
-numpy
-scipy
-opencv-python-headless
-pydantic
-python-dotenv
-python-multipart
-httpx
-pytest
+# Exact versions the test suite passes on, so a deployed build matches what was tested.
+fastapi==0.162.0
+uvicorn==0.54.0
+openai==3.38.0
+meta-sam-parser==0.1.0
+numpy==2.5.4
+scipy==1.18.1
+opencv-python-headless==5.0.0.93
+pydantic==2.14.1
+python-dotenv==1.2.4
+python-multipart==0.0.32
+httpx==0.28.1
