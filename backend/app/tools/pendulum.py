@@ -225,6 +225,7 @@ def pendulum_period(t, x, y, length_m=None, length_uncertainty_m=None, auto_segm
         "method": "damped sinusoid fit x(t) = A e^(-bt) cos(2 pi t / T + phi) + c",
         "fit_quality": {"r2": r2, "cycles": cycles, "axis": axis,
                         "damping_rate_per_s": float(popt[1]), "n_points": int(len(ts)),
+                        "equilibrium": float(popt[4]),
                         "segment": {"start_s": float(ts[0] - t[0]), "end_s": float(ts[-1] - t[0]),
                                     "trimmed": trimmed},
                         "uncertainty_components": comps,
