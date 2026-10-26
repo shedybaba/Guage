@@ -78,8 +78,19 @@ class Plan:
     def ready(self):
         return self.unsupported is None and not self.missing
 
+    @classmethod
+    def from_dict(cls, d):
+        """Rebuild a plan stored as JSON (the inverse of to_dict), for follow-up questions."""
+        return cls(question=d.get("question", ""), tool=d.get("tool"), outputs=list(d.get("outputs", [])),
+                   targets=[Target(**t) for t in d.get("targets", [])], quantity=d.get("quantity"), line=d.get("line"),
+                   check_camera=d.get("check_camera", True), compare_with_ramp=d.get("compare_with_ramp", False),
+                   values={k: ValueEntry(**v) for k, v in d.get("values", {}).items()},
+                   missing=[MissingInput(**m) for m in d.get("missing", [])], notes=list(d.get("notes", [])),
+                   interpretation=d.get("interpretation", ""), unsupported=d.get("unsupported"))
+
     def to_dict(self):
-        return {"tool": self.tool, "outputs": self.outputs, "interpretation": self.interpretation,
+        return {"question": self.question, "compare_with_ramp": self.compare_with_ramp,
+                "tool": self.tool, "outputs": self.outputs, "interpretation": self.interpretation,
                 "targets": [{"role": t.role, "phrases": t.phrases} for t in self.targets],
                 "quantity": self.quantity, "line": self.line, "check_camera": self.check_camera,
                 "values": {k: vars(v) for k, v in self.values.items()},
@@ -290,6 +301,9 @@ def normalise_plan(raw, question, *, video_size=None, known_values=None, previou
     plan.outputs = outputs or [spec.outputs[0]]
 
     plan.targets = _targets(raw.get("targets"), notes)
+    given_ref = clean_phrase((known_values or {}).get("reference_object")) if isinstance((known_values or {}).get("reference_object"), str) else None
+    if given_ref:  # the caller named the object that has the known length: it replaces whatever the model guessed
+        plan.targets = [t for t in plan.targets if t.role != "reference"] + [Target("reference", [given_ref])]
     plan.values = _values(raw.get("values"), question, notes)
 
     # numbers carried from an earlier question, then numbers handed over by the caller (these win)

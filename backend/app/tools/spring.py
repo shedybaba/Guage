@@ -15,7 +15,8 @@ import numpy as np
 from scipy.optimize import curve_fit
 from scipy.signal import find_peaks
 
-from .oscillation import MIN_CYCLES, MIN_R2, _fit, _honest_uncertainty, _model, find_swing_segment
+from .oscillation import (MIN_CYCLES, MIN_R2, _fit, _honest_uncertainty, _model, find_swing_segment,
+                          no_clear_oscillation)
 
 MAX_DAMPING = 30.0  # fastest decay (1/s) the fit may find: springs die out faster than pendulums
 FEW_CYCLES = 5  # the damping needs several cycles to be pinned down
@@ -127,6 +128,9 @@ def oscillation_frequency(t, x, y, mass_kg=None, mass_uncertainty_kg=None, sprin
     ss_tot = float(np.sum((ss - ss.mean()) ** 2))
     r2 = 1 - sse / ss_tot if ss_tot > 0 else 0.0
     cycles = float(t0[-1] / T)
+    unclear = no_clear_oscillation(popt, sse, len(ss), r2)
+    if unclear:
+        return _empty(unclear)
     dt = float(np.median(np.diff(t0)))
     fps = 1.0 / dt
     noise = float(np.sqrt(sse / len(ss)))

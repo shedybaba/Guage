@@ -127,6 +127,28 @@ def missing_inputs(tool, outputs, values, compare_with_ramp=False):
     return out
 
 
+def used_values(tool, outputs, compare_with_ramp=False, quantity=None):
+    """The names of stated values this measurement actually uses (only these can need the user's confirmation)."""
+    used = set()
+    if tool == "pendulum_period" and "g" in outputs:
+        used.add("string_length")
+    elif tool == "oscillation_frequency":
+        if "spring_constant" in outputs:
+            used |= {"mass", "spring_mass"}
+        used.add("reference_length")
+    elif tool == "free_fall":
+        used.add("reference_length")
+    elif tool == "velocity_acceleration":
+        used.add("reference_length")
+        if compare_with_ramp:
+            used.add("ramp_angle")
+        if quantity == "speed":
+            used.add("time")
+    elif tool == "collision_momentum" and "momentum" in outputs:
+        used |= {"mass", "reference_length"}
+    return used
+
+
 def supported_summary():
     """A plain list of what Gauge can measure, for answering an unsupported question honestly."""
     return [f"{t.summary}" for t in AVAILABLE.values()]

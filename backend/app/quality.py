@@ -41,6 +41,19 @@ class LogEntry:
     ok: bool | None = None
 
 
+class _Log(list):
+    """A list of LogEntry that also tells a listener about each entry as it is written (for live progress)."""
+
+    def __init__(self, on_log=None):
+        super().__init__()
+        self._on_log = on_log
+
+    def append(self, entry):
+        super().append(entry)
+        if self._on_log:
+            self._on_log(entry)
+
+
 @dataclass
 class CheckedTrack:
     status: str  # ok | warnings | failed
@@ -283,13 +296,13 @@ def _fill_from_box(points, new_points, object_id, direction, from_frame, total_f
     return sorted(points + added, key=lambda p: p.frame), len(added), rejected
 
 
-async def track_with_checks(tracker, phrases, total_frames, *, max_phrases=3, max_box_retries=3):
+async def track_with_checks(tracker, phrases, total_frames, *, max_phrases=3, max_box_retries=3, on_log=None):
     """Track one object, check the result, and retry in order (phrase, box) until it is good.
 
     `tracker` needs two async methods: track_phrase(phrase) and
     track_box(frame, (left, top, right, bottom), direction), each returning a TrackResult.
     """
-    log, billed = [], 0
+    log, billed = _Log(on_log), 0
     best = None  # (score, phrase, points, issues)
 
     for n, phrase in enumerate(phrases[:max_phrases]):
@@ -435,7 +448,7 @@ def _group_by_object(points):
 
 
 async def track_objects_with_checks(tracker, phrases, total_frames, frame_size, *, max_phrases=3,
-                                    max_box_retries=3, check_camera=True):
+                                    max_box_retries=3, check_camera=True, on_log=None):
     """Like track_with_checks, but for every object a phrase matches (parts, balls, ...).
 
     - Another name is tried only for zero matches, low confidence or jumps; the group of
@@ -447,7 +460,7 @@ async def track_objects_with_checks(tracker, phrases, total_frames, frame_size, 
     `tracker` needs track_phrase(phrase) and track_boxes([(frame, box), ...], direction); in the
     result of track_boxes the object ids are "0", "1", ... in the order the boxes were given.
     """
-    log, billed, best = [], 0, None
+    log, billed, best = _Log(on_log), 0, None
     names = phrases[:max_phrases]
 
     for n, phrase in enumerate(names):

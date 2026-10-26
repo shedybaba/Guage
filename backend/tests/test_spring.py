@@ -190,3 +190,10 @@ def test_the_quoted_uncertainties_cover_the_truth_most_of_the_time():
         hits["k"] += abs(kk["value"] - k) <= 2 * kk["uncertainty"]
     for name, h in hits.items():
         assert h / runs >= 0.85, (name, h)
+
+
+def test_noise_is_not_mistaken_for_an_oscillation():
+    rng = np.random.default_rng(0)
+    t = np.arange(0, 12, 1 / FPS)
+    r = oscillation_frequency(t, 100 + rng.normal(0, 0.3, t.size), 50 + rng.normal(0, 0.3, t.size))
+    assert r["value"] is None and "No clear oscillation" in r["warnings"][-1]

@@ -13,6 +13,8 @@ from scipy.optimize import curve_fit
 
 MIN_CYCLES = 2
 MIN_R2 = 0.9
+MIN_SNR = 6.0  # the fitted swing must be at least 6x the tracking noise, or it is not a swing
+MIN_R2_ACCEPT = 0.5  # and the fit must explain at least half of the motion
 WINDOW_CYCLES = 3  # swing detection looks at windows 3 periods long
 CLEAN_RESIDUAL = 0.2  # window is a clean swing if residual < 20% of its amplitude
 MIN_AMPLITUDE_FRACTION = 0.25  # ... and its amplitude is at least 25% of the biggest swing
@@ -157,3 +159,13 @@ def _honest_uncertainty(t0, s, popt, pcov, fitted):
     comps = {"fit": fit_sigma, "cycle_scatter": scatter, "timing_floor": floor,
              "residual_autocorrelation": rho, "noise_inflation": inflation}
     return max(parts), comps
+
+
+def no_clear_oscillation(popt, sse, n, r2):
+    """A sentence if the fit is not a real oscillation (noise always has some sine wave in it), else None."""
+    noise = (sse / max(n, 1)) ** 0.5
+    amp = abs(float(popt[0]))
+    if amp < MIN_SNR * noise or r2 < MIN_R2_ACCEPT:
+        return (f"No clear oscillation was found: the object only moves by about {2 * amp:.1f} pixels back and forth "
+                f"(tracking noise is about {noise:.1f} pixels), so there is no swing to measure.")
+    return None

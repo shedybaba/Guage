@@ -355,3 +355,23 @@ def test_to_dict_is_json_ready():
     p = plan_for("What is g?", draft(outputs=["g"]))
     d = json.loads(json.dumps(p.to_dict()))
     assert d["tool"] == "pendulum_period" and d["ready"] is False and d["missing"][0]["name"] == "string_length"
+
+
+def test_a_plan_survives_a_round_trip_through_json():
+    import json
+    q = "What is g? The string is 50 cm"
+    p = plan_for(q, draft(outputs=["g"], values=[value("string_length", 50, "cm", "50 cm")]))
+    again = type(p).from_dict(json.loads(json.dumps(p.to_dict())))
+    assert again.tool == p.tool and again.outputs == p.outputs and again.main_phrases == p.main_phrases
+    assert again.values["string_length"].value == p.values["string_length"].value
+    assert again.question == q and again.ready == p.ready
+    assert previous_summary(again) == previous_summary(p)
+
+
+def test_only_the_values_a_measurement_uses_can_need_confirmation():
+    from app.tools.registry import used_values
+    assert used_values("pendulum_period", ["period"]) == set()
+    assert used_values("pendulum_period", ["g"]) == {"string_length"}
+    assert used_values("oscillation_frequency", ["spring_constant"]) >= {"mass", "spring_mass"}
+    assert used_values("velocity_acceleration", ["acceleration"], compare_with_ramp=True) == {"reference_length", "ramp_angle"}
+    assert used_values("count_objects", ["count"]) == set()

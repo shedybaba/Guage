@@ -13,7 +13,7 @@ Two things make the answer trustworthy on real video:
 """
 import numpy as np
 
-from .oscillation import MIN_CYCLES, MIN_R2, _fit, _honest_uncertainty, _model, find_swing_segment
+from .oscillation import MIN_CYCLES, MIN_R2, _fit, _honest_uncertainty, _model, find_swing_segment, no_clear_oscillation
 
 G_STANDARD = 9.81
 
@@ -60,6 +60,9 @@ def pendulum_period(t, x, y, length_m=None, length_uncertainty_m=None, auto_segm
     ss_tot = float(np.sum((ss - ss.mean()) ** 2))
     r2 = 1 - sse / ss_tot if ss_tot > 0 else 0.0
     cycles = float(t0[-1] / T)
+    unclear = no_clear_oscillation(popt, sse, len(ss), r2)
+    if unclear:
+        return _empty(unclear)
 
     warnings = []
     if trimmed:

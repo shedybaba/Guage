@@ -94,9 +94,15 @@ def test_clean_signal_is_not_trimmed():
 
 
 def test_auto_segment_can_be_turned_off():
+    t, x, y, = synthetic(T=1.5, seconds=12.0)
+    r = pendulum_period(t, x, y, auto_segment=False)
+    assert r["fit_quality"]["segment"]["trimmed"] is False  # on a clean swing the whole clip is used either way
+
+
+def test_without_segmentation_set_up_motion_is_not_passed_off_as_a_swing():
     t, x, y = with_setup_motion()
     r = pendulum_period(t, x, y, auto_segment=False)
-    assert r["fit_quality"]["segment"]["trimmed"] is False
+    assert r["value"] is None and "No clear oscillation" in r["warnings"][-1]
 
 
 def correlated_noise(n, rho, sigma, rng):
@@ -137,3 +143,24 @@ def test_rejects_flat_signal():
     r = pendulum_period(t, np.full_like(t, 5.0), np.full_like(t, 7.0))
     assert r["value"] is None
     assert r["warnings"]
+
+
+def test_noise_is_not_mistaken_for_a_swing():
+    rng = np.random.default_rng(0)
+    t = np.arange(0, 12, 1 / 30)
+    r = pendulum_period(t, 100 + rng.normal(0, 0.3, t.size), 50 + rng.normal(0, 0.3, t.size))  # a still object, jittering
+    assert r["value"] is None and "No clear oscillation" in r["warnings"][-1]
+
+
+def test_a_weak_swing_inside_a_lot_of_noise_is_not_reported():
+    rng = np.random.default_rng(1)
+    t = np.arange(0, 12, 1 / 30)
+    x = 100 + 0.8 * np.sin(2 * np.pi * t / 1.4) + rng.normal(0, 1.0, t.size)  # amplitude below the noise
+    assert pendulum_period(t, x, np.full_like(t, 50.0))["value"] is None
+
+
+def test_a_small_but_clean_swing_is_still_measured():
+    rng = np.random.default_rng(2)
+    t = np.arange(0, 12, 1 / 30)
+    x = 100 + 4.0 * np.sin(2 * np.pi * t / 1.4) + rng.normal(0, 0.2, t.size)  # tiny but far above the noise
+    assert pendulum_period(t, x, np.full_like(t, 50.0))["value"] == pytest.approx(1.4, abs=0.02)
