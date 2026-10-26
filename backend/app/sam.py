@@ -141,13 +141,23 @@ async def track(client, file_id: str, phrase: str, key: str | None = None,
     return await _run(client, file_id, phrase, {}, key or file_id, phrase, use_cache)
 
 
-def box_prompt_text(frame: int, box, size) -> str:
-    """Prompt text for one box on one frame, clipped to the video's displayed size (width, height)."""
+def _prompt_object(object_id: int, frame: int, box, size) -> PromptObject:
+    """One object's box on one frame, clipped to the video's displayed size (width, height)."""
     w, h = size
     left, top = max(0, int(np.floor(box[0]))), max(0, int(np.floor(box[1])))
     right, bottom = min(w, int(np.ceil(box[2]))), min(h, int(np.ceil(box[3])))
-    return build_object_prompt(size=(w, h), objects=[
-        PromptObject(id=0, prompts=[FramePrompt(frame=frame, box=PromptBox(left, top, right, bottom))])])
+    return PromptObject(id=object_id, prompts=[FramePrompt(frame=frame, box=PromptBox(left, top, right, bottom))])
+
+
+def box_prompt_text(frame: int, box, size) -> str:
+    """Prompt text for one box on one frame."""
+    return build_object_prompt(size=tuple(size), objects=[_prompt_object(0, frame, box, size)])
+
+
+def boxes_prompt_text(prompts, size) -> str:
+    """Prompt text for several objects at once: prompts is [(frame, box), ...]; object ids are 0, 1, ..."""
+    return build_object_prompt(size=tuple(size), objects=[
+        _prompt_object(i, frame, box, size) for i, (frame, box) in enumerate(prompts)])
 
 
 async def track_box(client, file_id: str, frame: int, box, size, direction: str = "forward",
@@ -155,6 +165,15 @@ async def track_box(client, file_id: str, frame: int, box, size, direction: str 
     """Re-acquire an object from a box on `frame`, tracking `direction` ("forward" or "backward")."""
     text = box_prompt_text(frame, box, size)
     label = f"box|{direction}|{text}"
+    return await _run(client, file_id, text, {"propagation_direction": direction},
+                      key or file_id, label, use_cache)
+
+
+async def track_boxes(client, file_id: str, prompts, size, direction: str = "forward",
+                      key: str | None = None, use_cache: bool = True) -> TrackResult:
+    """Re-acquire SEVERAL objects in one request (up to 16). Result ids are "0", "1", ... in prompt order."""
+    text = boxes_prompt_text(prompts, size)
+    label = f"boxes|{direction}|{text}"
     return await _run(client, file_id, text, {"propagation_direction": direction},
                       key or file_id, label, use_cache)
 
@@ -171,3 +190,7 @@ class SamTracker:
     async def track_box(self, frame: int, box, direction: str = "forward") -> TrackResult:
         return await track_box(self.client, self.file_id, frame, box, self.size, direction,
                                self.key, self.use_cache)
+
+    async def track_boxes(self, prompts, direction: str = "forward") -> TrackResult:
+        return await track_boxes(self.client, self.file_id, prompts, self.size, direction,
+                                 self.key, self.use_cache)
