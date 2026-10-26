@@ -33,4 +33,6 @@ def _int(name, default):
 MAX_UPLOAD_MB = _int("GAUGE_MAX_UPLOAD_MB", 300)
 MAX_FRAMES = _int("GAUGE_MAX_FRAMES", 15000)  # SAM's own limit for one clip
 MIN_FRAMES = 20
+MAX_AUDIO_MB = _int("GAUGE_MAX_AUDIO_MB", 5)  # a 30 s question is well under 1 MB
+VOICE_PER_HOUR = _int("GAUGE_VOICE_PER_HOUR", 300)  # at $0.18 per hour of audio this costs almost nothing
 CORS_ORIGINS = [o.strip() for o in os.getenv("GAUGE_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o.strip()]

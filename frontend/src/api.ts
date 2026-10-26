@@ -62,6 +62,14 @@ export const rawSegmentationUrl = (videoId: string, phrase: string) =>
 export const ask = (videoId: string, question: string, knownValues?: Record<string, number | string>) =>
   postJson<{ job_id: string }>(`/api/videos/${videoId}/questions`, { question, ...(knownValues ? { known_values: knownValues } : {}) })
 
+/** Send a recorded question; the server returns the words that were heard (never asks anything by itself). */
+export async function transcribe(audio: Blob, filename: string): Promise<{ text: string; seconds: number }> {
+  const form = new FormData()
+  form.append('file', audio, filename)
+  const r = await fetch(`${BASE}/api/transcribe`, { method: 'POST', body: form })
+  return (await (await check(r)).json()) as { text: string; seconds: number }
+}
+
 export type AnswerBody = Record<string, { value?: number; unit?: string; text?: string }>
 export const answer = (jobId: string, answers: AnswerBody) => postJson<{ job_id: string }>(`/api/jobs/${jobId}/answers`, { answers })
 

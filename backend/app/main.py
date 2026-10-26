@@ -10,6 +10,7 @@
   GET  /api/videos/{id}/video            the video, for playback
   GET  /api/videos/{id}/segmentation     SAM's own output for a phrase (masks included) when it is stored
   GET  /api/videos/{id}/data.csv         the tracked data of the latest answered question
+  POST /api/transcribe                   a spoken question (audio, up to 30 s) -> {text} for the user to review
   GET  /api/health
 
 Interactive documentation is served at /docs.
@@ -20,6 +21,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -29,7 +31,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Str
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, sam, video
+from . import config, sam, transcribe, video
 from .jobs import ALLOWED_KNOWN, JobRunner, Limits, SubmitError
 from .store import TERMINAL, Store, new_id
 from .tools.registry import KNOWN_VALUE_KEYS
@@ -107,7 +109,7 @@ class ImmutableAssets(StaticFiles):
         return r
 
 
-def create_app(store=None, runner=None, data_dir=None, frontend_dir=None):
+def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transcriber=None):
     """Build the app. Tests pass a store and a runner with fake model and tracker; production passes nothing.
 
     If the frontend has been built (frontend/dist), the same server serves it, so there is one address and no CORS.
@@ -122,6 +124,8 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None):
         stale = app.state.store.mark_stale_failed()
         if stale:
             log.warning("marked %d unfinished job(s) as failed after a restart", stale)
+        app.state.transcriber = transcriber or transcribe.MetaTranscriber()
+        app.state.voice_times = []
         if runner is not None:
             app.state.runner = runner
         else:
@@ -148,6 +152,43 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None):
         s = st(request)
         return {"status": "ok", "version": app.version, "sam_model": config.SAM_MODEL, "language_model": config.SPARK_MODEL,
                 "api_key_configured": bool(os.getenv("MODEL_API_KEY")), "active_jobs": s.count_active()}
+
+    # ------------------------------------------------------------------ voice
+    @app.post("/api/transcribe")
+    async def transcribe_question(request: Request, file: UploadFile):
+        """Turn a recorded question into text. The text is only shown to the user; nothing is asked or measured."""
+        now = time.time()
+        recent = request.app.state.voice_times
+        recent[:] = [t for t in recent if now - t < 3600]
+        if len(recent) >= config.VOICE_PER_HOUR:
+            raise HTTPException(429, "Too many voice questions in the last hour. Please type your question instead.")
+        data = await file.read(config.MAX_AUDIO_MB * 1024 * 1024 + 1)
+        if not data:
+            raise HTTPException(400, "The recording is empty.")
+        if len(data) > config.MAX_AUDIO_MB * 1024 * 1024:
+            raise HTTPException(413, "That recording is too large. Questions can be up to 30 seconds long.")
+        folder = request.app.state.data_dir / "tmp" / new_id()
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            src = folder / "recording.bin"
+            src.write_bytes(data)
+            wav = folder / "recording.wav"
+            try:
+                seconds = await asyncio.to_thread(transcribe.to_wav, src, wav)
+                if seconds > transcribe.MAX_SECONDS + 2:
+                    raise transcribe.TranscribeError("That recording is longer than 30 seconds. Please keep the question short.", 413)
+                if seconds < 0.3:
+                    raise transcribe.TranscribeError("That recording was too short to hear anything. Please try again.", 400)
+                recent.append(now)
+                text = await request.app.state.transcriber.transcribe(wav)
+            except transcribe.TranscribeError as e:
+                raise HTTPException(e.status, str(e)) from None
+        finally:
+            import shutil
+            shutil.rmtree(folder, ignore_errors=True)  # recordings are never kept
+        if not text:
+            raise HTTPException(422, "No speech was heard. Please try again, closer to the microphone, or type your question.")
+        return {"text": text, "seconds": round(seconds, 1)}
 
     # ------------------------------------------------------------------ videos
     @app.post("/api/videos", status_code=201)
