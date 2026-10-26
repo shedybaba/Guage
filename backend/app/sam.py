@@ -10,6 +10,7 @@ import json
 from dataclasses import asdict, dataclass
 
 import numpy as np
+import openai
 from meta_sam_parser import (FramePrompt, PromptBox, PromptObject, SegmentationBoxRecord,
                              SegmentationMaskRecord, build_object_prompt, decode_mask_to_raster,
                              parse_responses_stream, video_segmentation_format)
@@ -128,18 +129,16 @@ async def _run(client, file_id: str, text: str, metadata: dict, key: str, label:
     if use_cache and (cached := load_cached(key, label)):
         cached.cached = True
         return cached
-    if callable(file_id):  # uploaded only now that a live request is really needed
-        file_id = await file_id()
-    usage_out: dict = {}
-    async with client.responses.stream(
-        model=SAM_MODEL,
-        input=[{"type": "message", "role": "user", "content": [
-            {"type": "input_text", "text": text},
-            {"type": "input_video", "file_id": file_id}]}],
-        metadata={"include_confidence": "true", "mask_encoding": "one_bit", **metadata},
-    ) as stream:
-        parsed = parse_responses_stream(_events(stream, usage_out, progress), video_segmentation_format())
-        final = await parsed.final_result()
+    provider = file_id if callable(file_id) else None
+    if provider:  # uploaded only now that a live request is really needed
+        file_id = await provider()
+    try:
+        final, usage_out = await _stream(client, file_id, text, metadata, progress)
+    except openai.NotFoundError as e:
+        if provider is None or getattr(e, "code", None) != "file_not_found":
+            raise
+        # Meta no longer has the uploaded video (it expires after 30 days, or was deleted): upload it again, once
+        final, usage_out = await _stream(client, await provider(stale=file_id), text, metadata, progress)
 
     usage = usage_out.get("usage") or {}
     billed = usage.get("video_frames_processed") if isinstance(usage, dict) else None
@@ -153,6 +152,21 @@ async def _run(client, file_id: str, text: str, metadata: dict, key: str, label:
         with gzip.open(p.with_suffix(".raw.gz"), "wt") as f:
             f.write(final.raw_output)
     return result
+
+
+async def _stream(client, file_id: str, text: str, metadata: dict, progress):
+    """The streamed request itself: returns the parsed result and the usage block."""
+    usage_out: dict = {}
+    async with client.responses.stream(
+        model=SAM_MODEL,
+        input=[{"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": text},
+            {"type": "input_video", "file_id": file_id}]}],
+        metadata={"include_confidence": "true", "mask_encoding": "one_bit", **metadata},
+    ) as stream:
+        parsed = parse_responses_stream(_events(stream, usage_out, progress), video_segmentation_format())
+        final = await parsed.final_result()
+    return final, usage_out
 
 
 def load_raw(key: str, label: str):

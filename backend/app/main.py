@@ -86,10 +86,11 @@ class SamTrackerFactory:
         from .meta_client import async_client, sync_client
         vid = vrow["id"]
 
-        async def file_id():
+        async def file_id(stale=None):
+            """The uploaded video's id, uploading it first if needed. `stale` is an id Meta no longer has."""
             async with self._locks.setdefault(vid, asyncio.Lock()):
                 current = self.store.get_video(vid)
-                if current["file_id"]:
+                if current["file_id"] and current["file_id"] != stale:  # (another question may have re-uploaded already)
                     return current["file_id"]
                 new = await asyncio.to_thread(lambda: video.upload(sync_client(), current["prepared"]))
                 self.store.set_file_id(vid, new)

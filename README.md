@@ -40,7 +40,7 @@ AI models do the perception and the language. **Every number comes from determin
 | **SAM 3.1** (video) | Concept prompts for tracking (one short noun phrase per object, parallel requests for several objects); per-frame confidence; one-bit masks; **box prompts** to re-acquire an object that was hidden (up to 16 objects in one request, forward or backward); results cached by the video's content so follow-ups are free |
 | **Muse Spark 1.3** | Planner: reads the question **and three keyframes** (it must name objects by how they look; on one clip "pendulum bob" found nothing, "glass marble" found it), strict JSON-schema output. Explainer: writes from a sheet of computed facts |
 | **Muse Voice Transcribe** | Spoken questions. The words come back to the question box for you to check, and are never asked automatically, because a mis-heard number would ruin a measurement |
-| **Meta Files API** | One upload per video, reused by every request |
+| **Meta Files API** | One upload per video, reused by every request; uploads expire after 30 days, and a missing file is uploaded again automatically |
 | **`@meta-sam/react`, `@meta-sam/parser`, `@meta-sam/graphics`** | The `<Video>` player draws SAM's real masks on the clip; Gauge's own overlay (numbered boxes, motion paths) uses the same colours and sits on top |
 
 ## The self-checking loop
@@ -73,7 +73,7 @@ Every step is written to a visible log ("How Gauge checked its work"), live whil
 - **Known answers first.** Every tool is tested on simulated motion with a known truth. The tools are calibrated on random simulated runs: the spring tool's 2σ interval covered the truth in 100 of 100 runs for frequency, damping and *k*; the free-fall and ramp tools were calibrated on 150 random runs each, with the scale error removed so the statistical part is tested on its own.
 - **Real clips second.** On two real pendulum videos the pendulum tool, the spring tool and the velocity tool agree with each other (frequency = 1/period exactly; peak speed from local fits within 0.4% and 4% of amplitude × ω). The line-crossing counter, with the line at the pendulum's rest position, finds the same swing timing as the pendulum tool (two crossings per swing). A Newton's cradle video gives exactly 7 objects.
 - **Failure paths are tested too:** a still object jittering by 0.1 px is *not* reported as a pendulum; an object that is hidden for 50 frames is re-acquired within 0.3 px of where SAM's own track says it is.
-- **Tests:** 418 backend tests and 85 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
+- **Tests:** 424 backend tests and 85 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
 
 ## Limits (stated plainly)
 
@@ -151,7 +151,7 @@ backend/app/        FastAPI app, job runner, SQLite store
 backend/tests/      pytest: tools on simulated motion, API with fakes
 frontend/src/       React app: upload, question box (with mic), live progress, result
 frontend/tests/     Vitest
-docs/               architecture diagram
+docs/               architecture diagram, demo video script
 scripts/            command-line demos that run one stage on a real clip
 Dockerfile, railway.json
 ```

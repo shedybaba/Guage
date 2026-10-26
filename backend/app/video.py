@@ -65,10 +65,15 @@ def prepare(src, dst) -> Path:
     return Path(dst)
 
 
+FILE_LIFETIME_S = 30 * 24 * 3600  # the longest Meta allows: visitors' videos do not stay on Meta's servers for ever
+
+
 def upload(client, path) -> str:
-    """Upload once to the Meta Files API and return the file_id to reuse."""
+    """Upload once to the Meta Files API and return the file_id to reuse. The file expires after 30 days
+    (a later question on an old video simply uploads it again, see sam._run)."""
     with open(path, "rb") as f:
-        return client.files.create(purpose="user_data", file=f).id
+        return client.files.create(purpose="user_data", file=f,
+                                   expires_after={"anchor": "created_at", "seconds": FILE_LIFETIME_S}).id
 
 
 def keyframes(path, n=3, width=480):
