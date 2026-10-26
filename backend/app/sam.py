@@ -81,22 +81,36 @@ async def _events(stream, usage_out: dict):
         yield event
 
 
-def _cache_file(file_id: str, phrase: str):
-    h = hashlib.sha256(f"{file_id}|{phrase}".encode()).hexdigest()[:20]
+def video_key(path) -> str:
+    """Content hash of a video file: the cache key that survives re-uploads."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _cache_file(key: str, phrase: str):
+    h = hashlib.sha256(f"{key}|{phrase}".encode()).hexdigest()[:20]
     return DATA_DIR / "sam_cache" / f"{h}.json"
 
 
-def load_cached(file_id: str, phrase: str):
-    p = _cache_file(file_id, phrase)
+def load_cached(key: str, phrase: str):
+    p = _cache_file(key, phrase)
     if not p.exists():
         return None
     d = json.loads(p.read_text())
     return TrackResult(d["phrase"], [TrackPoint(**x) for x in d["points"]], d["frames_billed"], d["diagnostics"])
 
 
-async def track(client, file_id: str, phrase: str, use_cache: bool = True) -> TrackResult:
-    """Track `phrase` through the whole video. `client` is an AsyncOpenAI for Meta."""
-    if use_cache and (cached := load_cached(file_id, phrase)):
+async def track(client, file_id: str, phrase: str, key: str | None = None,
+                use_cache: bool = True) -> TrackResult:
+    """Track `phrase` through the whole video. `client` is an AsyncOpenAI for Meta.
+
+    `key` identifies the video for the cache (see video_key); it defaults to file_id.
+    """
+    key = key or file_id
+    if use_cache and (cached := load_cached(key, phrase)):
         return cached
     usage_out: dict = {}
     async with client.responses.stream(
@@ -113,7 +127,7 @@ async def track(client, file_id: str, phrase: str, use_cache: bool = True) -> Tr
     billed = usage.get("video_frames_processed") if isinstance(usage, dict) else None
     result = TrackResult(phrase, _build_points(final.records), billed,
                          [d.message for d in final.diagnostics])
-    p = _cache_file(file_id, phrase)
+    p = _cache_file(key, phrase)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"phrase": phrase, "points": [asdict(x) for x in result.points],
                              "frames_billed": billed, "diagnostics": result.diagnostics}))
