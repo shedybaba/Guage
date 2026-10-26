@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+openai
+meta-sam-parser
+numpy
+scipy
+opencv-python-headless
+pydantic
+python-dotenv
+python-multipart
+httpx
+pytest
