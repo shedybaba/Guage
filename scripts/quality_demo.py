@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import numpy as np  # noqa: E402
 
-from app import sam, video  # noqa: E402
+from app import sam, signals, video  # noqa: E402
+from app.tools.pendulum import pendulum_period  # noqa: E402
 from app.meta_client import async_client, sync_client  # noqa: E402
 from app.quality import track_with_checks  # noqa: E402
 
@@ -48,6 +49,8 @@ async def main():
     ap.add_argument("clip")
     ap.add_argument("--phrases", nargs="+", required=True)
     ap.add_argument("--simulate-gap", nargs=2, type=int, metavar=("START", "END"))
+    ap.add_argument("--fit-pendulum", action="store_true", help="after tracking, fit the swing period")
+    ap.add_argument("--length-m", type=float, default=None, help="string length to the bob's centre")
     ap.add_argument("--no-cache", action="store_true")
     args = ap.parse_args()
 
@@ -71,6 +74,21 @@ async def main():
         print(f"  {mark}{e.message}")
     for a in r.advice:
         print("  advice:", a)
+
+    if args.fit_pendulum and r.points:
+        series = signals.series_for_object(r.points, r.object_id, info.timestamps)
+        m = pendulum_period(series["t"], series["x"], series["y"], length_m=args.length_m)
+        if m["value"] is None:
+            print("\nNo period:", m["warnings"])
+        else:
+            fq = m["fit_quality"]
+            print(f"\nPeriod T = {m['value']:.4f} +/- {m['uncertainty']:.4f} s  (R2 {fq['r2']:.4f}, "
+                  f"{fq['cycles']:.1f} cycles, axis {fq['axis']}, segment {fq['segment']['start_s']:.1f}-{fq['segment']['end_s']:.1f} s)")
+            if "g" in m["extra"]:
+                g = m["extra"]["g"]
+                print(f"g = {g['value']:.2f} +/- {g['uncertainty']:.2f} m/s^2 ({g['percent_error_vs_standard']:.1f}% from 9.81)")
+            for w in m["warnings"]:
+                print("WARNING:", w)
 
     if args.simulate_gap and tracker.original:
         got = {p.frame: p for p in r.points}
