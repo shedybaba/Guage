@@ -1,0 +1,21 @@
+# Secrets (single .env at the repo root holds all keys)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+
+# Local data
+*.sqlite3
+*.db
+samples/*
+!samples/.gitkeep
+.DS_Store
