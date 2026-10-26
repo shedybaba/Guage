@@ -29,6 +29,8 @@ MIN_LOW_CONF_RUN = 3
 JUMP_FACTOR = 4.0  # a step more than 4x the median step ...
 JUMP_MIN_DIAGONALS = 0.5  # ... and more than half the object's size is a jump
 MAX_MERGE_GAP_FRAMES = 30
+NAME_RETRY_SHARE = 0.25  # with several objects, another name is tried only if this share of them has a name-fixable problem
+NAME_SWITCH_MARGIN = 0.02  # another name replaces the first only if its average quality is clearly better
 NAME_FIXABLE = ("low_confidence", "jump")  # problems another noun phrase can fix; gaps need a box prompt
 
 
@@ -468,13 +470,22 @@ async def track_objects_with_checks(tracker, phrases, total_frames, frame_size, 
         for oid, iss in issues.items():
             for i in iss:
                 log.append(LogEntry("check", f"Object {oid}: {i['detail']}.", ok=False))
-        score = sum(_score(pts, total_frames) for pts in tracks.values())
-        if best is None or score > best[0]:
+        # score a group by the AVERAGE quality of its objects: a name that merely finds one more (poor) object
+        # must not win, and the first name is kept unless another is clearly better
+        score = float(np.mean([_score(pts, total_frames) for pts in tracks.values()]))
+        if best is None or score > best[0] + NAME_SWITCH_MARGIN:
             best = (score, phrase, tracks, issues)
-        if not any(i["kind"] in NAME_FIXABLE for iss in issues.values() for i in iss):
+        # a few objects with a problem are a local problem (one ball half hidden), not a wrong name
+        fixable = sum(1 for iss in issues.values() if any(i["kind"] in NAME_FIXABLE for i in iss))
+        if fixable < max(1, int(np.ceil(NAME_RETRY_SHARE * len(tracks)))):
             if any(issues.values()) and n + 1 < len(names):
-                log.append(LogEntry("check", "Only frames are missing (objects were hidden), so another name "
-                                    "would not help; going straight to re-acquiring them.", ok=None))
+                if fixable == 0:
+                    msg = ("Only frames are missing (objects were hidden), so another name would not help; "
+                           "going straight to re-acquiring them.")
+                else:
+                    msg = (f"Only {fixable} of {len(tracks)} objects have a tracking problem; that is a local problem "
+                           "(an object partly hidden), not a wrong name, so this name is kept.")
+                log.append(LogEntry("check", msg, ok=None))
             break
 
     if best is None:

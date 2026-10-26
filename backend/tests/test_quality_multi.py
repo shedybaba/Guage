@@ -253,3 +253,43 @@ def test_camera_check_can_be_switched_off_for_a_conveyor():
     off = run(MultiFake({"part": shaky(6)}), ["part"], check_camera=False)
     assert any(i["kind"] == "camera_motion" for i in on.scene_issues)
     assert off.scene_issues == []
+
+
+def many(n=7, poor=()):
+    """n well-separated objects; those in `poor` have low confidence throughout."""
+    pts = []
+    for i in range(n):
+        pts += obj_track(i, 80 + 90 * i, conf=0.2 if i in poor else 0.9)
+    return pts
+
+
+def test_one_poor_object_among_seven_is_not_a_reason_to_try_another_name():
+    t = MultiFake({"ball": many(7, poor={3}), "metal ball": many(7)})
+    r = run(t, ["ball", "metal ball"])
+    assert t.phrase_calls == ["ball"] and r.count == 7  # one half-hidden ball is a local problem, not a wrong name
+
+
+def test_a_quarter_of_the_objects_in_trouble_does_justify_another_name():
+    t = MultiFake({"ball": many(7, poor={2, 5}), "metal ball": many(7)})
+    r = run(t, ["ball", "metal ball"])
+    assert t.phrase_calls == ["ball", "metal ball"] and r.phrase == "metal ball"
+
+
+def test_a_name_that_only_adds_a_poor_extra_object_does_not_win():
+    first = many(3, poor={0, 1})  # two of three objects poor: another name is tried
+    second = many(3, poor={0, 1}) + obj_track(9, 600, conf=0.2)  # same trouble plus one more poor object: no better
+    t = MultiFake({"ball": first, "shiny ball": second})
+    r = run(t, ["ball", "shiny ball"])
+    assert r.phrase == "ball" and r.count == 3  # the extra object did not buy the win
+
+
+def test_a_clearly_better_name_still_wins_even_with_the_same_number_of_objects():
+    t = MultiFake({"ball": many(4, poor={0, 1}), "red ball": many(4)})
+    assert run(t, ["ball", "red ball"]).phrase == "red ball"
+
+
+def test_the_log_says_what_actually_happened_when_a_name_is_kept():
+    t = MultiFake({"ball": many(7, poor={3}), "metal ball": many(7)})
+    r = run(t, ["ball", "metal ball"])
+    msgs = " ".join(e.message for e in r.log)
+    assert "Only 1 of 7 objects have a tracking problem" in msgs and "Only frames are missing" not in msgs

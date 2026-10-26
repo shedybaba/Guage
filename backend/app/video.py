@@ -69,3 +69,22 @@ def upload(client, path) -> str:
     """Upload once to the Meta Files API and return the file_id to reuse."""
     with open(path, "rb") as f:
         return client.files.create(purpose="user_data", file=f).id
+
+
+def keyframes(path, n=3, width=480):
+    """n small JPEG frames spread evenly through the video, as data URLs for the model to LOOK at.
+
+    The planner names objects by what they look like, so it must see the video. Frames are small (about
+    30 KB each) because a few frames are enough to name an object and cost almost nothing.
+    """
+    import base64
+
+    info = probe(path)
+    out = []
+    for k in range(n):
+        idx = int(info.frame_count * (k + 0.5) / n)
+        jpg = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-vf", f"select='eq(n,{idx})',scale={width}:-1",
+                              "-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+                             capture_output=True, check=True).stdout
+        out.append("data:image/jpeg;base64," + base64.b64encode(jpg).decode())
+    return out
