@@ -113,7 +113,7 @@ function Workspace({ videoId, onNew }: { videoId: string; onNew: () => void }) {
         <button type="button" onClick={onNew} className="text-sm font-medium text-ink-soft underline underline-offset-4 hover:text-ink">Use another video</button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
         <div className="sticky top-[3.7rem] z-20 -mx-4 bg-paper/95 px-4 pb-2 pt-1 backdrop-blur lg:top-20 lg:mx-0 lg:self-start lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
           <TrackedVideo
             src={videoUrl(videoId)} info={info} tracks={tracks}

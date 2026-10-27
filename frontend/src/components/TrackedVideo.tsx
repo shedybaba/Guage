@@ -183,7 +183,7 @@ export function TrackedVideo({ src, info, tracks, rawUrl }: Props) {
           <button type="button" onClick={() => step(1)} aria-label="Next frame" className="rounded-md border border-line px-2 py-1.5 text-sm hover:bg-paper-2">›</button>
           <input
             type="range" min={0} max={duration || 1} step={0.01} value={Math.min(time, duration || 1)}
-            onChange={(e) => seek(Number(e.target.value))} aria-label="Position in the video" className="mx-1 h-2 flex-1 accent-accent"
+            onChange={(e) => seek(Number(e.target.value))} aria-label="Position in the video" className="mx-1 h-2 min-w-0 flex-1 accent-accent"
           />
           <span className="num whitespace-nowrap text-xs text-ink-soft">{formatClock(time)} · frame {frame}</span>
         </div>
@@ -194,7 +194,7 @@ export function TrackedVideo({ src, info, tracks, rawUrl }: Props) {
           <label className="flex items-center gap-1.5">
             <input type="checkbox" checked={opts.showBoxes} onChange={(e) => setOpts({ ...opts, showBoxes: e.target.checked, showLabels: e.target.checked })} className="accent-accent" disabled={!tracks} /> Boxes and numbers
           </label>
-          <span className="ml-auto">
+          <span className="min-w-0 sm:ml-auto">
             {!tracks ? 'Ask a question to see what Gauge tracked.'
               : useMeta ? 'Coloured masks: SAM 3.1. Numbers and paths: Gauge’s final tracks.'
                 : 'Numbers, boxes and paths: Gauge’s final tracks.'}
