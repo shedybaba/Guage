@@ -267,3 +267,10 @@ def test_the_spring_constant_is_only_in_the_method_when_it_was_computed(results)
                           plan_obj("oscillation_frequency", ["damping"]))
     assert any("spring constant" in m for m in with_k.method)
     assert not any("spring constant" in m for m in without.method)
+
+
+def test_quotation_marks_around_figures_are_removed():
+    from app.explain import strip_number_quotes
+    assert strip_number_quotes('The period is "0.8582 ± 0.0016 s" over "8.75" swings.') == "The period is 0.8582 ± 0.0016 s over 8.75 swings."
+    assert strip_number_quotes('Called “method one” and "4.538 s" long.') == 'Called “method one” and 4.538 s long.'
+    assert strip_number_quotes('A "quoted" word in 3 steps then "more" text') == 'A "quoted" word in 3 steps then "more" text'

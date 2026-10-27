@@ -11,6 +11,7 @@ Limits, said plainly: the check covers digits. It cannot judge whether a sentenc
 it does not police numbers written as words, which the prompt forbids.
 """
 import json
+import re
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -330,7 +331,7 @@ INSTRUCTIONS = """You write the plain-language explanation of a measurement for 
 Code has already measured everything; you receive its FACTS as JSON. You only put words around them.
 
 Rules about numbers (they are checked by code, and an answer that breaks them is thrown away):
-- Use ONLY numbers that appear in the facts, copied exactly as written (for example "1.419 ± 0.002 s"). Never calculate, \
+- Use ONLY numbers that appear in the facts, copied exactly as written (for example 1.419 ± 0.002 s). Never put quotation marks around numbers or units. Never calculate, \
 round differently, convert units, work out a difference, a ratio or a percentage, or add any other number.
 - If you want to compare two numbers, use words only ("close to", "a little below"), never a new number.
 - Do not write quantities as number words ("two", "half"). Do not number list items. Do not mention software or model names.
@@ -374,6 +375,11 @@ def fallback_explanation(facts):
     return Explanation(summary, list(facts.method) + [c for c in facts.checks[:2]], list(facts.warnings[:3]), "fallback")
 
 
+def strip_number_quotes(text):
+    """Remove quotation marks wrapped around a figure ("0.86 s" -> 0.86 s): the model copies them from the facts sheet."""
+    return re.sub(r'["“”]([-+−]?\d[^"“”\n]*)["“”]', r"\1", text)
+
+
 async def explain(llm, facts, max_attempts=2):
     """Ask Muse Spark for the explanation and check every number in it; fall back to code-written text if needed."""
     allowed = facts.allowed()
@@ -395,8 +401,8 @@ async def explain(llm, facts, max_attempts=2):
         parts = [str(d.get("summary", ""))] + [str(s) for s in d.get("how_measured", [])] + [str(s) for s in d.get("caveats", [])]
         bad = find_unsupported_numbers("\n".join(parts), allowed)
         if not bad and d.get("summary", "").strip():
-            return Explanation(d["summary"].strip(), [s.strip() for s in d["how_measured"]],
-                               [s.strip() for s in d["caveats"]], "model", attempt, [], "", usage)
+            return Explanation(strip_number_quotes(d["summary"].strip()), [strip_number_quotes(s.strip()) for s in d["how_measured"]],
+                               [strip_number_quotes(s.strip()) for s in d["caveats"]], "model", attempt, [], "", usage)
         reason = f"the explanation contained numbers that were not measured: {', '.join(bad)}" if bad else "the summary was empty"
     fb = fallback_explanation(facts)
     fb.attempts, fb.rejected_numbers, fb.reason, fb.usage = made, bad, reason, usage
