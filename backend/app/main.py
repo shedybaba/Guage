@@ -12,6 +12,7 @@
   GET  /api/videos/{id}/data.csv         the tracked data of the latest answered question
   POST /api/transcribe                   a spoken question (audio, up to 30 s) -> {text} for the user to review
   GET  /api/health
+  GET  /api/health/models                which Meta models this server can see (a deployment self-check)
 
 Interactive documentation is served at /docs.
 """
@@ -165,6 +166,27 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
         s = st(request)
         return {"status": "ok", "version": app.version, "sam_model": config.SAM_MODEL, "language_model": config.SPARK_MODEL,
                 "api_key_configured": bool(os.getenv("MODEL_API_KEY")), "active_jobs": s.count_active()}
+
+    @app.get("/api/health/models")
+    async def health_models(request: Request):
+        """Which Meta models this server can see (the list Meta shows to THIS server). Cached for a minute; no key is returned."""
+        cache = getattr(request.app.state, "models_cache", None) or {"at": 0.0, "body": None}
+        request.app.state.models_cache = cache
+        if cache["body"] is not None and time.time() - cache["at"] < 60:
+            return cache["body"]
+        from .meta_client import async_client
+        body = {"models": None, "error": None, "wanted": {"language_model": config.SPARK_MODEL, "sam_model": config.SAM_MODEL}}
+        try:
+            listing = await async_client().models.list()
+            body["models"] = sorted(m.id for m in listing.data)
+        except RuntimeError:
+            body["error"] = "no_api_key"
+        except Exception as e:  # noqa: BLE001 - report the kind of failure only, never its text
+            body["error"] = f"{type(e).__name__}" + (f" HTTP {e.status_code}" if getattr(e, "status_code", None) else "")
+        if body["models"] is not None:
+            body["wanted_available"] = {k: v in body["models"] for k, v in body["wanted"].items()}
+        cache.update(at=time.time(), body=body)
+        return body
 
     # ------------------------------------------------------------------ voice
     @app.post("/api/transcribe")

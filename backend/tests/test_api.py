@@ -425,3 +425,30 @@ def test_answers_for_the_time_lapse_are_validated(client, video_id):
     url = f"/api/jobs/{first['job_id']}/answers"
     assert client.post(url, json={"answers": {"real_duration": {"value": 3, "unit": "kg"}}}).status_code == 422  # wrong kind of unit
     assert client.post(url, json={"answers": {"real_duration": {"value": 0.1, "unit": "s"}}}).status_code == 422  # absurdly short
+
+
+def test_the_models_self_check_reports_the_kind_of_failure_and_never_a_key(client, monkeypatch):
+    import app.meta_client as mc
+
+    class Boom:
+        class models:
+            @staticmethod
+            async def list():
+                import httpx
+                import openai
+                req = httpx.Request("GET", "https://api.meta.ai/v1/models")
+                raise openai.PermissionDeniedError("secret text sk-ABC", response=httpx.Response(403, request=req), body=None)
+    monkeypatch.setattr(mc, "async_client", lambda: Boom())
+    r = client.get("/api/health/models")
+    assert r.status_code == 200 and r.json()["error"] == "PermissionDeniedError HTTP 403" and "secret" not in r.text and "sk-" not in r.text
+    ok = type("L", (), {"data": [type("M", (), {"id": "sam-3.1"})(), type("M", (), {"id": "muse-spark-1.3"})()]})()
+
+    class Good:
+        class models:
+            @staticmethod
+            async def list():
+                return ok
+    client.app.state.models_cache = {"at": 0.0, "body": None}
+    monkeypatch.setattr(mc, "async_client", lambda: Good())
+    body = client.get("/api/health/models").json()
+    assert body["models"] == ["muse-spark-1.3", "sam-3.1"] and body["wanted_available"]["sam_model"] is True
