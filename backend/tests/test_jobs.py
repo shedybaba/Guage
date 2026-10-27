@@ -318,7 +318,8 @@ def test_a_model_failure_is_described_without_leaking_its_message():
     from app.llm import LLMError
     from app.planner import PlannerError
     req = httpx.Request("POST", "https://api.meta.ai/v1/responses")
-    api = openai.AuthenticationError("Incorrect API key provided: sk-SECRET123", response=httpx.Response(401, request=req), body=None)
+    api = openai.AuthenticationError("Incorrect API key provided: sk-SECRET123", response=httpx.Response(401, request=req),
+                                     body={"code": "invalid_api_key", "message": "Incorrect API key provided: sk-SECRET123"})
     try:
         try:
             try:
@@ -329,4 +330,4 @@ def test_a_model_failure_is_described_without_leaking_its_message():
             raise PlannerError(str(e)) from e
     except PlannerError as e:
         text = describe_failure(e)
-    assert "AuthenticationError (HTTP 401)" in text and "SECRET" not in text and "Incorrect" not in text
+    assert "AuthenticationError (HTTP 401) code=invalid_api_key" in text and "SECRET" not in text and "Incorrect" not in text

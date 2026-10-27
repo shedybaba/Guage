@@ -44,7 +44,9 @@ def describe_failure(exc):
     parts, e = [], exc
     while e is not None and len(parts) < 4:
         status = getattr(e, "status_code", None)
-        parts.append(type(e).__name__ + (f" (HTTP {status})" if status else ""))
+        code = getattr(e, "code", None)  # a short label such as 'model_not_found', not free text
+        parts.append(type(e).__name__ + (f" (HTTP {status})" if status else "")
+                     + (f" code={code}" if isinstance(code, str) and re.fullmatch(r"[a-z0-9_.-]{1,40}", code) else ""))
         e = e.__cause__
     return " <- ".join(parts)
 
