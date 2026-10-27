@@ -12,7 +12,8 @@
   GET  /api/videos/{id}/data.csv         the tracked data of the latest answered question
   POST /api/transcribe                   a spoken question (audio, up to 30 s) -> {text} for the user to review
   GET  /api/health
-  GET  /api/health/probe                 one tiny real Muse Spark and SAM request from this server (cached 5 minutes)
+  GET  /api/health/network               host, path, DNS, TLS and proxy facts for Meta requests (compare a deployment with a laptop)
+  GET  /api/health/probe               one tiny real Muse Spark and SAM request from this server (cached 5 minutes)
   GET  /api/health/models                which Meta models this server can see (a deployment self-check)
 
 Interactive documentation is served at /docs.
@@ -189,6 +190,17 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
             body["wanted_available"] = {k: v in body["models"] for k, v in body["wanted"].items()}
         cache.update(at=time.time(), body=body)
         return body
+
+    @app.get("/api/health/network")
+    async def health_network(request: Request):
+        """Where this server's Meta requests really go (host, path, DNS, TLS, proxy variables, Meta's raw answer), for
+        comparing a deployment with a laptop. Cached for a minute; no key or message text is returned."""
+        cache = getattr(request.app.state, "network_cache", None) or {"at": 0.0, "body": None}
+        request.app.state.network_cache = cache
+        if cache["body"] is None or time.time() - cache["at"] >= 60:
+            from . import netcheck
+            cache.update(at=time.time(), body=await netcheck.collect())
+        return cache["body"]
 
     @app.get("/api/health/probe")
     async def health_probe(request: Request):
