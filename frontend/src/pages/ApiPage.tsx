@@ -17,10 +17,11 @@ function Code({ children, label }: { children: string; label: string }) {
 }
 
 const ASK = `# 1. upload a video
-curl -F "file=@pendulum.mp4" ${BASE}/api/videos
+curl -F "file=@my_video.mp4" ${BASE}/api/videos
 # -> {"video_id": "2feb8f27…", "fps": 29.97, "frame_count": 362, "width": 720, "height": 1280, "duration": 12.05}
 
-# 2. ask a question about it
+# 2. ask a question about it (any plain-English question: "How many parts crossed the line?",
+#    "How fast is the wheel turning?", "What is the acceleration of the falling ball?" ...)
 curl -X POST ${BASE}/api/videos/2feb8f27…/questions \\
   -H "Content-Type: application/json" \\
   -d '{"question": "What is the swing period?"}'

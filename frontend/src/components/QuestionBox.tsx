@@ -2,10 +2,11 @@ import { useRef, useState } from 'react'
 import { MAX_SECONDS, useVoice } from '../hooks/useVoice'
 
 const EXAMPLES = [
+  'How many parts crossed the line?',
+  'What is the acceleration of the falling ball?',
   'What is the swing period?',
   "What is the spring's frequency?",
-  'How many parts crossed the line?',
-  'What is the acceleration of the ball?',
+  'How fast is the wheel turning?',
   'Is momentum conserved in the collision?',
 ]
 
@@ -54,7 +55,7 @@ export function QuestionBox({ onAsk, busy, disabledReason, hasHistory }: {
         id="question" ref={area} value={text} onChange={(e) => { setText(e.target.value); setHeard(false) }} readOnly={listening} rows={2} maxLength={1000}
         onFocus={() => setFocused(true)} onBlur={() => setTimeout(() => setFocused(false), 150)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || !e.shiftKey)) { e.preventDefault(); void submit() } }}
-        placeholder={hasHistory ? 'Ask a follow-up about the same video…' : 'Ask a question about the video, e.g. “What is the swing period?”'}
+        placeholder={hasHistory ? 'Ask a follow-up about the same video…' : 'Ask what you want to measure, e.g. “How many parts crossed the line?”'}
         className="w-full resize-none rounded-lg border border-line bg-paper px-3 py-2 text-base placeholder:text-ink-soft/70 focus:border-accent focus:outline-none"
       />
       <div className="mt-2 flex flex-wrap items-center gap-2">

@@ -25,7 +25,7 @@ describe('Home', () => {
 describe('API page', () => {
   it('shows working examples and every call', () => {
     render(<ApiPage />)
-    expect(screen.getByText(/curl -F "file=@pendulum.mp4"/)).toBeInTheDocument()
+    expect(screen.getByText(/curl -F "file=@my_video.mp4"/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '/docs' })).toHaveAttribute('href', '/docs')
     for (const path of ['/api/videos', '/api/jobs/{id}/events', '/api/jobs/{id}/answers']) expect(screen.getAllByText(path).length).toBeGreaterThan(0)
   })
