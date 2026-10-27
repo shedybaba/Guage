@@ -265,8 +265,7 @@ class JobRunner:
                 motion = await asyncio.to_thread(self.camera_fn, vrow, checked.tracks, info)
                 entry = runner.camera_log_entry(motion)
                 if entry:
-                    checked.log.append(entry)
-                    on_log(entry)
+                    checked.log.append(entry)  # the log list also tells the live events, so no separate on_log call
                 if motion is not None and motion.apply:
                     measured = dataclasses.replace(checked, tracks=camera.stabilize_tracks(checked.tracks, motion))
             tool_result = await asyncio.to_thread(runner.run_tool, plan, measured, info, scale)

@@ -374,6 +374,8 @@ def test_a_steady_camera_changes_nothing_but_is_reported(env):
     assert abs(j["result"]["headline"]["value"] - 1.2) < 0.01
     line = [c for c in j["result"]["checks"] if c["step"] == "camera"]
     assert len(line) == 1 and "stayed still" in line[0]["message"]
+    live = [e for e in store.events_after(j["id"]) if e["kind"] == "log" and e["message"].startswith("Camera check")]
+    assert len(live) == 1  # shown once in the live progress, not twice
 
 
 def test_counting_does_not_run_the_camera_check(env):
