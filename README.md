@@ -8,7 +8,7 @@ Built for the **Meta Global AI Developer Hackathon** (Cerebral Valley), Indie De
 
 **All of this code was written during the hackathon (October 26 to November 4, 2026).** The commit history of this repository starts on the first day and shows the work growing step by step.
 
-Live demo: _added at submission_ · Demo video: _added at submission_
+Live demo: https://guage-production.up.railway.app · Demo video: _added at submission_
 
 ---
 
