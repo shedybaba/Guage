@@ -14,6 +14,7 @@ import os
 import platform
 import socket
 import ssl
+import time
 from urllib.parse import urlsplit
 
 import httpx
@@ -119,6 +120,38 @@ async def _models_request(with_key: bool) -> dict:
     return out
 
 
+async def _raw(method: str, path: str, body: dict | None = None) -> dict:
+    """A bare HTTP request (no SDK) with the key in the Authorization header: the same thing `curl -H 'Authorization: Bearer ...'` sends.
+
+    Returns what Meta can be asked about: when we sent it (UTC), the status, Meta's x-request-id, and the short error code.
+    """
+    key = os.environ.get("MODEL_API_KEY")
+    if not key:
+        return {"skipped": "no MODEL_API_KEY"}
+    sent = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.request(method, config.META_BASE_URL + path, json=body, headers={"Authorization": f"Bearer {key}"})
+    except Exception as e:  # noqa: BLE001
+        return {"sent_at": sent, "error": type(e).__name__}
+    out = {"sent_at": sent, "request": f"{method} {config.META_BASE_URL}{path}", "status": r.status_code,
+           "x_request_id": r.headers.get("x-request-id"), "x_route": r.headers.get("x-route"), "response_date": r.headers.get("date")}
+    try:
+        err = r.json().get("error") or {}
+        out["error_code"] = err.get("code") if isinstance(err.get("code"), str) else None
+        out["error_type"] = err.get("type") if isinstance(err.get("type"), str) else None
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _key_fingerprint() -> dict:
+    """Length and a short hash of the key, so two machines can show they hold the same key without showing it."""
+    key = os.environ.get("MODEL_API_KEY") or ""
+    return {"length": len(key), "sha256_first8": hashlib.sha256(key.encode()).hexdigest()[:8] if key else None,
+            "has_whitespace_or_quotes": bool(key) and (key != key.strip() or any(ch in key for ch in " \n\r\t\"'"))}
+
+
 async def _egress_ip() -> str | None:
     """The public address this machine's requests leave from, as a public echo service sees it (nothing is sent to it)."""
     try:
@@ -134,6 +167,8 @@ async def collect() -> dict:
     loop = asyncio.get_running_loop()
     dns, tls = await asyncio.gather(loop.run_in_executor(None, _dns, host), loop.run_in_executor(None, _tls, host))
     with_key, without_key, egress = await asyncio.gather(_models_request(True), _models_request(False), _egress_ip())
+    raw_models = await _raw("GET", "/models")
+    raw_spark = await _raw("POST", "/responses", {"model": "muse-spark-1.3", "input": "Reply with the single word ok.", "max_output_tokens": 200})
     return {
         "machine": {"hostname": socket.gethostname(), "system": platform.platform(), "python": platform.python_version(),
                     "openai_sdk": openai.__version__, "httpx": httpx.__version__},
@@ -144,6 +179,9 @@ async def collect() -> dict:
                        "language_model": config.SPARK_MODEL, "sam_model": config.SAM_MODEL},
         "environment": _env(),
         "egress_ip": egress,
+        "key": _key_fingerprint(),
+        "raw_models_request": raw_models,
+        "raw_spark_request": raw_spark,
         "dns": dns,
         "tls": tls,
         "models_request_with_key": with_key,
