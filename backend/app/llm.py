@@ -8,11 +8,16 @@ Facts found on the live API:
 Nothing here ever prints a key or sends one anywhere but Meta's endpoint (see meta_client.py).
 """
 import json
+import logging
 from dataclasses import dataclass, field
 
 from .config import SPARK_MODEL
 
 # USD per million tokens (input, output), from the pricing page
+log = logging.getLogger("gauge.llm")
+# Tried in this order if Meta answers 'model_not_found': the cheap contributor model is not in Meta's public model list and
+# has answered 404 on a deployed server while working elsewhere; the standard model is listed and costs about a cent a question.
+FALLBACK_MODELS = ("muse-spark-1.3",)
 PRICES = {"muse-spark-1.3-contributor": (0.10, 0.20), "muse-spark-1.3": (1.25, 4.25)}
 
 
@@ -59,8 +64,9 @@ def usage_from(response, model):
 class SparkLLM:
     """One place that talks to Muse Spark. `client` is an AsyncOpenAI pointed at Meta (or a test double)."""
 
-    def __init__(self, client, model=None, effort="minimal", max_output_tokens=4000, max_attempts=3):
+    def __init__(self, client, model=None, effort="minimal", max_output_tokens=4000, max_attempts=3, fallbacks=FALLBACK_MODELS):
         self.client, self.model = client, model or SPARK_MODEL
+        self.fallbacks = [m for m in fallbacks if m != self.model]
         self.effort, self.max_output_tokens, self.max_attempts = effort, max_output_tokens, max_attempts
 
     async def json(self, instructions, parts, schema, name, effort=None):
@@ -74,6 +80,10 @@ class SparkLLM:
                     reasoning={"effort": effort or self.effort}, max_output_tokens=budget,
                     text={"format": {"type": "json_schema", "name": name, "schema": schema, "strict": True}})
             except Exception as e:  # network / API errors: the SDK has already retried what is retryable
+                if getattr(e, "code", None) == "model_not_found" and self.fallbacks:
+                    log.warning("model %s was not found; switching to %s", self.model, self.fallbacks[0])
+                    self.model = self.fallbacks.pop(0)  # sticky: later questions keep using the model that works
+                    continue
                 raise LLMError(f"The model request failed ({type(e).__name__}): {str(e)[:200]}") from e
             usage.add(usage_from(r, self.model))
             last = getattr(r, "output_text", "") or ""

@@ -108,3 +108,38 @@ def test_keyframes_are_small_decodable_jpegs_spread_through_the_clip(tmp_path):
         assert f.startswith("data:image/jpeg;base64,")
         raw = base64.b64decode(f.split(",", 1)[1])
         assert raw[:2] == b"\xff\xd8" and len(raw) < 60_000  # a real JPEG, and small
+
+
+def not_found(model="muse-spark-1.3-contributor"):
+    import httpx
+    import openai
+    req = httpx.Request("POST", "https://api.meta.ai/v1/responses")
+    return openai.NotFoundError("The requested model was not found.", response=httpx.Response(404, request=req),
+                                body={"code": "model_not_found", "message": "The requested model was not found."})
+
+
+def test_a_missing_model_falls_back_to_the_standard_one_and_stays_there():
+    client = FakeClient(not_found(), response('{"a": 1}'), response('{"a": 2}'))
+    llm = SparkLLM(client, model="muse-spark-1.3-contributor")
+    first = asyncio.run(llm.json("x", [{"type": "input_text", "text": "hi"}], SCHEMA, "thing"))
+    asyncio.run(llm.json("x", [{"type": "input_text", "text": "hi"}], SCHEMA, "thing"))
+    assert first.data == {"a": 1} and [c["model"] for c in client.calls] == ["muse-spark-1.3-contributor", "muse-spark-1.3", "muse-spark-1.3"]
+    assert first.usage.cost_usd == pytest.approx((100 * 1.25 + 50 * 4.25) / 1e6)  # priced as the model that really answered
+
+
+def test_if_the_fallback_is_missing_too_it_is_an_error_not_a_loop():
+    with pytest.raises(LLMError):
+        ask(FakeClient(not_found(), not_found()), model="muse-spark-1.3-contributor")
+    with pytest.raises(LLMError):  # the standard model itself missing: nothing left to try
+        ask(FakeClient(not_found()), model="muse-spark-1.3")
+
+
+def test_other_404s_and_errors_do_not_switch_models():
+    import httpx
+    import openai
+    req = httpx.Request("POST", "https://api.meta.ai/v1/responses")
+    other = openai.NotFoundError("nope", response=httpx.Response(404, request=req), body={"code": "file_not_found"})
+    client = FakeClient(other)
+    with pytest.raises(LLMError):
+        ask(client, model="muse-spark-1.3-contributor")
+    assert len(client.calls) == 1
