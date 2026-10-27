@@ -1,8 +1,9 @@
 """Per-visitor limits: one person cannot use up the shared budget.
 
-A visitor is identified by the address of the machine that connected. Behind Railway's proxy that address is in
-the X-Forwarded-For header; the proxy ADDS the real client address at the end, so the last entry is the one
-to trust (earlier entries can be written by the visitor). Counts live in memory and reset on a restart, which
+A visitor is identified by the address of the machine that connected. Behind a proxy that address can be in
+the X-Forwarded-For header; a proxy ADDS the real client address at the end, so the last entry is the one
+to trust (earlier entries can be written by the visitor). On Modal the header is not passed on and the
+connection's own address is already the visitor's, so that is used. Counts live in memory and reset on a restart, which
 is fine for a cost guard: the global limits in jobs.py still apply to everyone together.
 """
 import time

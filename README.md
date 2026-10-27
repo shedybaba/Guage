@@ -144,15 +144,6 @@ modal secret create gauge-meta MODEL_API_KEY=...   # once; your Meta key
 modal deploy modal_app.py
 ```
 
-## Deploy (Railway)
-
-The repository has a `Dockerfile` (it builds the website, then runs the Python server with ffmpeg) and a `railway.json`. On Railway:
-
-1. Create a project from this repository. Railway builds the `Dockerfile`.
-2. Add a **volume** mounted at `/data` (videos, results and the SQLite database live there).
-3. Set the variable `MODEL_API_KEY`. Optional spend cap for a public site: `GAUGE_DAILY_SAM_FRAMES=30000` (the default is 100,000 frames a day, about 20 US dollars).
-4. Generate a public domain. The site must be served over HTTPS for the microphone to work (browsers require it); Railway domains are.
-
 Other settings, all optional, are listed in `.env.example` (upload size, concurrent jobs, hourly limits, job timeout).
 
 Public deployments have cost guards. For everyone together: 300 MB uploads, 15,000 frames per video, 2 jobs working and 12 waiting, 120 questions an hour, a daily SAM frame budget and a 15 minute timeout per job. For each visitor, per hour: 40 questions, 15 uploads and 60 voice questions.
@@ -172,5 +163,5 @@ frontend/src/       React app: upload, question box (with mic), live progress, r
 frontend/tests/     Vitest
 docs/               architecture diagram, demo video script
 scripts/            command-line demos that run one stage on a real clip
-Dockerfile, railway.json, modal_app.py
+Dockerfile, modal_app.py
 ```
