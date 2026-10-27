@@ -331,3 +331,70 @@ def test_a_model_failure_is_described_without_leaking_its_message():
     except PlannerError as e:
         text = describe_failure(e)
     assert "AuthenticationError (HTTP 401) code=invalid_api_key" in text and "SECRET" not in text and "Incorrect" not in text
+
+
+# ------------------------------------------------------------ camera motion
+
+def shaking_camera(n=N, steady=False):
+    import numpy as np
+    from app.camera import CameraMotion
+    w = np.tile(np.eye(3), (n, 1, 1))
+    if not steady:
+        w[:, 0, 2] = 6 * np.sin(np.arange(n) / 7)  # the picture slides sideways by up to 6 px
+    peak = float(np.abs(w[:, 0, 2]).max())
+    return CameraMotion(w, 1.0, peak, True, peak >= 1.0, n)
+
+
+def test_the_tool_sees_positions_with_the_camera_removed_but_the_drawn_tracks_stay_as_filmed(env, monkeypatch):
+    import numpy as np
+    from app import runner
+    store, tmp, vid = env
+    seen = {}
+    real = runner.run_tool
+
+    def spy(plan, checked, info, scale):
+        seen["x"] = np.array([p.cx for p in checked.tracks["0"]])
+        return real(plan, checked, info, scale)
+    monkeypatch.setattr(runner, "run_tool", spy)
+    h = Harness(store, tmp, camera_fn=lambda row, tracks, info: shaking_camera())
+    j = job(store, run(h, vid, "What is the swing period?"))
+    assert j["status"] == "done"
+    filmed = np.array([p.cx for p in __import__("tests.fakes", fromlist=["world"]).world("glass marble", N)])
+    assert np.abs(seen["x"] - filmed).max() > 5  # the tool got the corrected positions
+    saved = json.loads((tmp / "jobs" / j["id"] / "tracks.json").read_text())
+    assert np.allclose(saved["objects"]["0"]["centre"], np.c_[filmed, [p.cy for p in __import__("tests.fakes", fromlist=["world"]).world("glass marble", N)]], atol=0.06)
+    line = [c for c in j["result"]["checks"] if c["step"] == "camera"]
+    assert len(line) == 1 and "followed the background" in line[0]["message"] and line[0]["ok"]
+
+
+def test_a_steady_camera_changes_nothing_but_is_reported(env):
+    store, tmp, vid = env
+    h = Harness(store, tmp, camera_fn=lambda row, tracks, info: shaking_camera(steady=True))
+    j = job(store, run(h, vid, "What is the swing period?"))
+    assert abs(j["result"]["headline"]["value"] - 1.2) < 0.01
+    line = [c for c in j["result"]["checks"] if c["step"] == "camera"]
+    assert len(line) == 1 and "stayed still" in line[0]["message"]
+
+
+def test_counting_does_not_run_the_camera_check(env):
+    store, tmp, vid = env
+    calls = []
+    h = Harness(store, tmp, camera_fn=lambda row, tracks, info: calls.append(1))
+    j = job(store, run(h, vid, "Please count them"))
+    assert j["result"]["tool"] == "count_objects"
+    assert calls == []
+
+
+def test_a_big_camera_move_is_reported_and_not_corrected(env, monkeypatch):
+    import numpy as np
+    from app import runner
+    from app.camera import CameraMotion
+    store, tmp, vid = env
+    w = np.tile(np.eye(3), (N, 1, 1))
+    w[:, 0, 0] = w[:, 1, 1] = np.linspace(1.0, 1.3, N)
+    big = CameraMotion(w, 1.0, 400.0, True, True, N, 0.3, 0.0)
+    h = Harness(store, tmp, camera_fn=lambda row, tracks, info: big)
+    j = job(store, run(h, vid, "What is the swing period?"))
+    assert abs(j["result"]["headline"]["value"] - 1.2) < 0.01  # the tool saw the tracks as filmed
+    line = [c for c in j["result"]["checks"] if c["step"] == "camera"]
+    assert len(line) == 1 and line[0]["ok"] is False and "did not try to correct" in line[0]["message"]

@@ -36,7 +36,7 @@ NAME_FIXABLE = ("low_confidence", "jump")  # problems another noun phrase can fi
 
 @dataclass
 class LogEntry:
-    step: str  # track | check | retry_phrase | retry_box | merge | give_up
+    step: str  # track | check | retry_phrase | retry_box | merge | give_up | camera
     message: str
     ok: bool | None = None
 

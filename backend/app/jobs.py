@@ -9,6 +9,7 @@ Background work is plain asyncio tasks writing to the SQLite store (no Celery, n
 the store, so any number of browsers can watch, and reconnecting loses nothing.
 """
 import asyncio
+import dataclasses
 import json
 import logging
 import re
@@ -16,7 +17,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import runner, video
+from . import camera, runner, video
 from .explain import build_facts, explain
 from .llm import LLMError, Usage
 from .planner import Plan, PlannerError, make_plan
@@ -82,10 +83,11 @@ def clean_known_values(raw):
 class JobRunner:
     """Runs jobs in the background. llm: SparkLLM. tracker_factory(video_row, on_progress) -> SAM tracker (async)."""
 
-    def __init__(self, store, data_dir, llm, tracker_factory, keyframes_fn=None, limits=None):
+    def __init__(self, store, data_dir, llm, tracker_factory, keyframes_fn=None, limits=None, camera_fn=None):
         self.store, self.data_dir, self.llm = store, Path(data_dir), llm
         self.tracker_factory = tracker_factory
         self.keyframes_fn = keyframes_fn or self._default_keyframes
+        self.camera_fn = camera_fn or self._default_camera
         self.limits = limits or Limits()
         self._sem = asyncio.Semaphore(self.limits.max_active)
         self._tasks = {}
@@ -172,6 +174,15 @@ class JobRunner:
         cache.write_text(json.dumps(frames))
         return frames
 
+    @staticmethod
+    def _default_camera(video_row, tracks, info):
+        """Follow the background of the stored video, keeping away from the tracked objects."""
+        boxes = {}
+        for pts in tracks.values():
+            for p in pts:
+                boxes.setdefault(p.frame, []).append((p.x1, p.y1, p.x2, p.y2))
+        return camera.estimate_camera_motion(video_row["prepared"], boxes, expected_size=(info.width, info.height))
+
     # ---- the pipeline
     async def _pipeline(self, job_id):
         job = self.store.get_job(job_id)
@@ -249,7 +260,16 @@ class JobRunner:
         try:
             scale = await runner.measure_scale(tracker, plan, info, known, on_log=on_log)
             extra_billed = scale.frames_billed if scale else 0
-            tool_result = await asyncio.to_thread(runner.run_tool, plan, checked, info, scale)
+            measured = checked  # what the tool sees; the drawn tracks (checked) stay as they were in the video
+            if plan.tool in runner.CAMERA_TOOLS:
+                motion = await asyncio.to_thread(self.camera_fn, vrow, checked.tracks, info)
+                entry = runner.camera_log_entry(motion)
+                if entry:
+                    checked.log.append(entry)
+                    on_log(entry)
+                if motion is not None and motion.apply:
+                    measured = dataclasses.replace(checked, tracks=camera.stabilize_tracks(checked.tracks, motion))
+            tool_result = await asyncio.to_thread(runner.run_tool, plan, measured, info, scale)
         except runner.MeasureError as e:
             tool_result = {"value": None, "warnings": [str(e)]}
         billed = checked.frames_billed + extra_billed

@@ -55,6 +55,10 @@ SAM can lose an object behind something, jump to a look-alike, or return nothing
 
 Every step is written to a visible log ("How Gauge checked its work"), live while it runs.
 
+## Camera shake
+
+A handheld camera moves every pixel, so a still object seems to move and a swinging one picks up the hand's motion. Before a position-based measurement, Gauge follows the **background** (corner points away from the tracked objects, optical flow, a shift-turn-zoom fitted with outlier rejection so a hand crossing the picture is ignored) and moves every tracked position back to where it would be if the camera had stayed put. Pure computer vision, no model. It is only applied when the camera really moved by a shake-sized amount (the background moved at least 1 px; zoom under 3% and turning under 4 degrees); a steady camera is left alone so the estimate's own noise is not added, and a big pan or zoom is reported but not corrected, because near and far things then shift differently (on a handheld clip of a Newton's cradle the correction made things worse, which is how that limit was found). Checked on photographs shaken by a known amount: the background motion is recovered to 0.03 to 0.05 px on 720 by 1280 frames, also while a textured object crosses the scene. On the real marble pendulum clip with a shake of known size added (shifts of up to 7 px and a turn of half a degree), the swing could no longer be measured at all; with the camera removed the period came back as 0.85822 s, against 0.85823 s without the added shake. Every answer says what the camera check found.
+
 ## Measurement tools
 
 | Tool | What it measures |
@@ -76,11 +80,11 @@ Every step is written to a visible log ("How Gauge checked its work"), live whil
 - **Rendered clips with known answers, through the real chain.** A red dot circling at exactly 75 rpm was read as 75.000 ± 0.008 rpm (SAM found the sticker, a Fourier check agreed). A growing plant drawn 77% taller was read as +69.5%: the gap is SAM's outline being a few pixels generous at the start, which is why the growth uncertainty includes an edge allowance.
 - **Real clips second.** On two real pendulum videos the pendulum tool, the spring tool and the velocity tool agree with each other (frequency = 1/period exactly; peak speed from local fits within 0.4% and 4% of amplitude × ω). The line-crossing counter, with the line at the pendulum's rest position, finds the same swing timing as the pendulum tool (two crossings per swing). A Newton's cradle video gives exactly 7 objects.
 - **Failure paths are tested too:** a still object jittering by 0.1 px is *not* reported as a pendulum; an object that is hidden for 50 frames is re-acquired within 0.3 px of where SAM's own track says it is.
-- **Tests:** 487 backend tests and 90 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
+- **Tests:** 500 backend tests and 90 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
 
 ## Limits (stated plainly)
 
-- Needs a still camera for best results; camera motion is detected and warned about, not corrected.
+- A still camera gives the best results. Shaking is measured from the background and removed (see below); a camera that pans, zooms or turns a lot cannot be corrected, and Gauge says so instead.
 - Distances need a scale (a known length in the picture, said or typed). Without one, time-based measurements (period, frequency, counts) still work and distance-based ones are given in pixels with a warning.
 - At 30 fps fast events fall between frames: film in slow motion for collisions and drops. Gauge warns when the frame rate is the limit.
 - **The wagon-wheel effect cannot be detected.** A marker turning 25 times a second, filmed at 30 frames a second, looks exactly like one turning 5 times a second the other way, so no software can tell them apart. Gauge refuses when the marker turns about half a turn or more between frames, states its assumption in every rotation answer, and the advice is the same: film fast rotation in slow motion.

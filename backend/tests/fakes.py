@@ -158,7 +158,7 @@ class FakeTracker:
 class Harness:
     """A JobRunner wired to the fakes, plus a record of what was called."""
 
-    def __init__(self, store, data_dir, llm=None, limits=None, tracker_kwargs=None):
+    def __init__(self, store, data_dir, llm=None, limits=None, tracker_kwargs=None, camera_fn=None):
         self.llm = llm or RoutedLLM()
         self.tracker_calls = 0
         self.trackers = []
@@ -171,4 +171,4 @@ class Harness:
             return tr
 
         self.runner = JobRunner(store, data_dir, self.llm, factory, keyframes_fn=lambda v: ["data:image/jpeg;base64,AAAA"],
-                                limits=limits or Limits())
+                                limits=limits or Limits(), camera_fn=camera_fn)

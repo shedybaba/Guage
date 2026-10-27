@@ -11,7 +11,7 @@ import io
 import numpy as np
 
 from . import signals
-from .quality import track_with_checks
+from .quality import LogEntry, track_with_checks
 from .store import jsonable
 from .tools.collision import collision_momentum
 from .tools.counting import count_objects, line_crossings
@@ -73,6 +73,32 @@ async def measure_scale(tracker, plan, info, known_values, on_log=None):
                      "the scale uncertainty is widened for that.")
     notes.append("The reference must be in the same plane as the motion (the same distance from the camera).")
     return ScaleInfo(ref.value / med, rel, notes, checked.frames_billed, checked.log)
+
+
+# tools whose answer is spoiled when the camera moves; counting and growth do not depend on exact positions, and the
+# collision tool already removes camera motion itself (using the objects that stay still), which is calibrated
+CAMERA_TOOLS = {"pendulum_period", "oscillation_frequency", "free_fall", "velocity_acceleration", "rotation_rate",
+                "line_crossings"}
+
+
+def camera_log_entry(motion):
+    """The line in 'how Gauge checked its work' about the camera (None if nothing could be said)."""
+    if motion is None:
+        return None
+    if not motion.usable:
+        return LogEntry("camera", "Camera check: there was not enough steady background to follow, so the camera's motion "
+                                  "could not be measured. If the camera moved, positions and speeds are less reliable.", ok=None)
+    if not motion.significant:
+        return LogEntry("camera", f"Camera check: the background stayed still (the most it moved was {motion.peak_shift_px:.1f} px), "
+                                  "so nothing was corrected.", ok=True)
+    if motion.too_large:
+        return LogEntry("camera", f"Camera check: the camera moved a lot (the background shifted by up to {motion.peak_shift_px:.0f} px, "
+                                  "with zoom or turning). That is more than a shake, and nearer and farther things shift differently, "
+                                  "so Gauge did not try to correct it. Positions, speeds and accelerations are less reliable: "
+                                  "film again with the camera propped still.", ok=False)
+    return LogEntry("camera", f"Camera check: the camera moved (the background shifted by up to {motion.peak_shift_px:.0f} px). "
+                              "Gauge followed the background and moved every tracked position back to where it would be "
+                              "if the camera had stayed still.", ok=True)
 
 
 def values_si(plan):
