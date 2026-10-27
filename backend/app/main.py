@@ -12,6 +12,7 @@
   GET  /api/videos/{id}/data.csv         the tracked data of the latest answered question
   POST /api/transcribe                   a spoken question (audio, up to 30 s) -> {text} for the user to review
   GET  /api/health
+  GET  /api/health/probe                 one tiny real Muse Spark and SAM request from this server (cached 5 minutes)
   GET  /api/health/models                which Meta models this server can see (a deployment self-check)
 
 Interactive documentation is served at /docs.
@@ -185,6 +186,56 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
             body["error"] = f"{type(e).__name__}" + (f" HTTP {e.status_code}" if getattr(e, "status_code", None) else "")
         if body["models"] is not None:
             body["wanted_available"] = {k: v in body["models"] for k, v in body["wanted"].items()}
+        cache.update(at=time.time(), body=body)
+        return body
+
+    @app.get("/api/health/probe")
+    async def health_probe(request: Request):
+        """One tiny REAL request to Muse Spark and one to SAM (a generated 96-pixel picture), from this server.
+
+        Shows whether the models answer from where this server runs. Costs a fraction of a cent, so the result is cached
+        for five minutes. Returns only what happened (worked, or the HTTP status and short code), never any key or message.
+        """
+        cache = getattr(request.app.state, "probe_cache", None) or {"at": 0.0, "body": None}
+        request.app.state.probe_cache = cache
+        if cache["body"] is not None and time.time() - cache["at"] < 300:
+            return cache["body"]
+        import base64
+
+        import cv2
+        import numpy as np
+        from .meta_client import async_client
+
+        def outcome(e):
+            code = getattr(e, "code", None)
+            return {"worked": False, "error": type(e).__name__ + (f" HTTP {e.status_code}" if getattr(e, "status_code", None) else "")
+                    + (f" code={code}" if isinstance(code, str) and len(code) < 40 else "")}
+
+        body = {"muse_spark": {}, "sam": {}}
+        try:
+            client = async_client()
+        except RuntimeError:
+            body = {"error": "no_api_key"}
+            cache.update(at=time.time(), body=body)
+            return body
+        for model in dict.fromkeys([config.SPARK_MODEL, "muse-spark-1.3"]):
+            try:
+                r = await client.responses.create(model=model, input="Reply with the single word ok.", max_output_tokens=200)
+                body["muse_spark"][model] = {"worked": True, "answer_chars": len(getattr(r, "output_text", "") or "")}
+            except Exception as e:  # noqa: BLE001
+                body["muse_spark"][model] = outcome(e)
+        img = np.full((96, 96, 3), 255, np.uint8)
+        cv2.circle(img, (48, 48), 24, (0, 0, 220), -1)
+        url = "data:image/png;base64," + base64.b64encode(cv2.imencode(".png", img)[1].tobytes()).decode()
+        try:
+            r = await client.responses.create(
+                model=config.SAM_MODEL, input=[{"type": "message", "role": "user", "content": [
+                    {"type": "input_text", "text": "red circle"}, {"type": "input_image", "image_url": url}]}],
+                metadata={"include_confidence": "true", "mask_encoding": "one_bit"})
+            text = getattr(r, "output_text", "") or ""
+            body["sam"] = {"worked": True, "found_something": "<|box" in text}
+        except Exception as e:  # noqa: BLE001
+            body["sam"] = outcome(e)
         cache.update(at=time.time(), body=body)
         return body
 

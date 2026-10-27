@@ -452,3 +452,26 @@ def test_the_models_self_check_reports_the_kind_of_failure_and_never_a_key(clien
     monkeypatch.setattr(mc, "async_client", lambda: Good())
     body = client.get("/api/health/models").json()
     assert body["models"] == ["muse-spark-1.3", "sam-3.1"] and body["wanted_available"]["sam_model"] is True
+
+
+def test_the_probe_reports_what_happened_from_this_server_without_leaking(client, monkeypatch):
+    import httpx
+    import openai
+
+    import app.meta_client as mc
+    req = httpx.Request("POST", "https://api.meta.ai/v1/responses")
+
+    class Denied:
+        class responses:
+            @staticmethod
+            async def create(**kw):
+                raise openai.NotFoundError("secret text sk-ABC", response=httpx.Response(404, request=req),
+                                           body={"code": "model_not_found", "message": "secret text sk-ABC"})
+    monkeypatch.setattr(mc, "async_client", lambda: Denied())
+    r = client.get("/api/health/probe")
+    body = r.json()
+    assert r.status_code == 200 and "secret" not in r.text and "sk-" not in r.text
+    assert body["sam"] == {"worked": False, "error": "NotFoundError HTTP 404 code=model_not_found"}
+    assert all(v["worked"] is False for v in body["muse_spark"].values())
+    monkeypatch.setattr(mc, "async_client", lambda: (_ for _ in ()).throw(AssertionError("must be cached")))
+    assert client.get("/api/health/probe").json() == body  # cached: a second call makes no new request
