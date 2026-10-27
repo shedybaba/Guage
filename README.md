@@ -8,7 +8,7 @@ Built for the **Meta Global AI Developer Hackathon** (Cerebral Valley), Indie De
 
 **All of this code was written during the hackathon (October 26 to November 4, 2026).** The commit history of this repository starts on the first day and shows the work growing step by step.
 
-Live demo: https://guage-production.up.railway.app · Demo video: _added at submission_
+Live demo: https://shedrackyashim--gauge-web.us-east.modal.run · Demo video: _added at submission_
 
 ---
 
@@ -134,6 +134,16 @@ curl http://localhost:8000/api/jobs/<job_id>               # status and result
 
 `POST /api/transcribe` turns a recorded question (up to 30 seconds) into text. The full list of calls, with examples, is on the site at `/developers` and in the interactive reference at `/docs`.
 
+## Deploy (Modal)
+
+`modal_app.py` runs the same server (API and website) on [Modal](https://modal.com) behind one HTTPS address, which the microphone needs. One container stays up on purpose: jobs run as background tasks and share one SQLite file. The database, uploaded videos and SAM cache live on a Modal Volume mounted at `/data`.
+
+```bash
+cd frontend && npm ci && npm run build && cd ..
+modal secret create gauge-meta MODEL_API_KEY=...   # once; your Meta key
+modal deploy modal_app.py
+```
+
 ## Deploy (Railway)
 
 The repository has a `Dockerfile` (it builds the website, then runs the Python server with ffmpeg) and a `railway.json`. On Railway:
@@ -162,5 +172,5 @@ frontend/src/       React app: upload, question box (with mic), live progress, r
 frontend/tests/     Vitest
 docs/               architecture diagram, demo video script
 scripts/            command-line demos that run one stage on a real clip
-Dockerfile, railway.json
+Dockerfile, railway.json, modal_app.py
 ```
