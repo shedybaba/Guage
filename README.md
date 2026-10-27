@@ -1,6 +1,6 @@
 # Gauge
 
-**Turn any phone camera into a measuring instrument.** Upload a video of an experiment or a machine, ask a question in plain English (typed or spoken), and get real measurements with their uncertainty, plus visual proof.
+**Turn any phone camera into a measuring instrument.** Film something that moves, turns or grows (an experiment, a machine, a production line), ask what you want to know in plain English (typed or spoken), and get real measurements with their uncertainty, plus visual proof. No sensors, no manual frame-by-frame tracking.
 
 > Chatbots guess. Manual tools like Tracker and Kinovea take hours. Gauge measures, from one question, and shows its proof.
 
@@ -10,15 +10,32 @@ Built for the **Meta Global AI Developer Hackathon** (Cerebral Valley), Indie De
 
 Live demo: https://shedrackyashim--gauge-web.us-east.modal.run · Demo video: _added at submission_
 
+**Who it is for:** labs and classrooms without expensive sensors, researchers who track motion by hand today, engineers checking a machine, and developers who want measurements from video through a plain API.
+
 ---
 
-## What it does
+## What you can ask Gauge
+
+Gauge is not one measurement. It has a toolbox, and it picks the right tool from your question and what is in the video.
+
+| You film | Example questions | Gauge measures |
+|---|---|---|
+| **Something swinging or bouncing** (a pendulum, a mass on a spring) | "What is the period?" "What is the frequency?" "How fast does it die away?" "What is the spring constant? The mass is 200 g." | Period, frequency, damping, spring constant *k*, and *g* from a pendulum of known length |
+| **Something falling or sliding** (a dropped object, a cart on a ramp) | "What is its acceleration?" "How fast is it going at 1.2 s?" "What is its top speed?" | Acceleration (with the tilt of the phone worked out), speed over time, a ramp compared with theory |
+| **A collision** (carts, balls, a Newton's cradle) | "Is momentum conserved?" | Total momentum and kinetic energy before and after each impact |
+| **Things moving past a point** (parts on a belt or tray, items on a line) | "How many are there?" "How many crossed the line?" "What is the rate per minute?" | Distinct object count, crossings by direction, rate per minute |
+| **A wheel, fan or motor** with a sticker on it | "How fast is it turning?" | Rpm, direction, number of turns |
+| **Something growing** (a plant, dough, a crystal, in a time-lapse) | "How much did it grow?" "How long to double?" | Total change, growth rate, doubling time |
+
+These are examples, not a fixed menu. Ask in your own words; Gauge reads the question and a few frames of the video, picks the tool, and tells you plainly when a question is something it cannot measure.
+
+## How it works
 
 1. **Upload** a video (MP4 or MOV, from a phone is fine).
-2. **Ask** a question, for example *"What is the swing period?"*, *"What is the spring's frequency?"*, *"How many parts crossed the line?"*. Tap the microphone to say it instead.
+2. **Ask** your question, typed or spoken. Tap the microphone to say it; the words appear in the box for you to check before anything runs.
 3. **Watch** Gauge work: frames tracked, and a plain-language log of how it checks and repairs its own tracking.
-4. **Get** the answer as a number with an uncertainty (for example `0.8582 ± 0.0016 s`), the video with every tracked object outlined, numbered and followed by its path, a chart of the data with the fitted curve, a short explanation, the warnings that matter, and a CSV of the tracked data.
-5. **Ask follow-ups** about the same video. Tracking already done is reused, so a follow-up costs almost nothing. If a measurement needs something Gauge cannot know (the string length, a mass), it stops and asks, and it never guesses.
+4. **Get** the answer as a number with an uncertainty (for example a period of `0.8582 ± 0.0016 s`), the video with every tracked object outlined, numbered and followed by its path, a chart of the data with the fitted curve, a short explanation, the warnings that matter, and a CSV of the tracked data.
+5. **Ask follow-ups** about the same video. Tracking already done is reused, so a follow-up costs almost nothing. If a measurement needs something Gauge cannot know (a length, a mass, how much real time a time-lapse covers), it stops and asks, and it never guesses.
 
 Gauge answers only what you ask. When it cannot measure something, it says so and says why, instead of giving a confident wrong number.
 
@@ -80,11 +97,11 @@ A handheld camera moves every pixel, so a still object seems to move and a swing
 - **Rendered clips with known answers, through the real chain.** A red dot circling at exactly 75 rpm was read as 75.000 ± 0.008 rpm (SAM found the sticker, a Fourier check agreed). A growing plant drawn 77% taller was read as +69.5%: the gap is SAM's outline being a few pixels generous at the start, which is why the growth uncertainty includes an edge allowance.
 - **Real clips second.** On two real pendulum videos the pendulum tool, the spring tool and the velocity tool agree with each other (frequency = 1/period exactly; peak speed from local fits within 0.4% and 4% of amplitude × ω). The line-crossing counter, with the line at the pendulum's rest position, finds the same swing timing as the pendulum tool (two crossings per swing). A Newton's cradle video gives exactly 7 objects.
 - **Failure paths are tested too:** a still object jittering by 0.1 px is *not* reported as a pendulum; an object that is hidden for 50 frames is re-acquired within 0.3 px of where SAM's own track says it is.
-- **Tests:** 500 backend tests and 90 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
+- **Tests:** 502 backend tests and 90 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
 
 ## Limits (stated plainly)
 
-- A still camera gives the best results. Shaking is measured from the background and removed (see below); a camera that pans, zooms or turns a lot cannot be corrected, and Gauge says so instead.
+- A still camera gives the best results. Shaking is measured from the background and removed (see Camera shake above); a camera that pans, zooms or turns a lot cannot be corrected, and Gauge says so instead.
 - Distances need a scale (a known length in the picture, said or typed). Without one, time-based measurements (period, frequency, counts) still work and distance-based ones are given in pixels with a warning.
 - At 30 fps fast events fall between frames: film in slow motion for collisions and drops. Gauge warns when the frame rate is the limit.
 - **The wagon-wheel effect cannot be detected.** A marker turning 25 times a second, filmed at 30 frames a second, looks exactly like one turning 5 times a second the other way, so no software can tell them apart. Gauge refuses when the marker turns about half a turn or more between frames, states its assumption in every rotation answer, and the advice is the same: film fast rotation in slow motion.
@@ -125,9 +142,9 @@ A 12-second phone clip is about 360 frames, which costs about **$0.07** of SAM a
 Everything the site does is a plain HTTP call, so other apps can plug Gauge in:
 
 ```bash
-curl -F "file=@pendulum.mp4" http://localhost:8000/api/videos
+curl -F "file=@my_video.mp4" http://localhost:8000/api/videos
 curl -X POST http://localhost:8000/api/videos/<video_id>/questions \
-  -H "Content-Type: application/json" -d '{"question": "What is the swing period?"}'
+  -H "Content-Type: application/json" -d '{"question": "How many parts cross the line?"}'
 curl -N http://localhost:8000/api/jobs/<job_id>/events     # live progress (server-sent events)
 curl http://localhost:8000/api/jobs/<job_id>               # status and result
 ```
