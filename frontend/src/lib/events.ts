@@ -10,13 +10,14 @@ export interface Stream {
   frames: { done: number; total: number } | null
   log: { id: number; message: string; ok: boolean | null; step: string }[]
   interpretation: string
+  tool: string | null
   ended: boolean
   error: string | null
 }
 
 export const emptyStream = (): Stream => ({
   events: [], lastId: 0, status: null, progress: 0, message: '', frames: null, log: [],
-  interpretation: '', ended: false, error: null,
+  interpretation: '', tool: null, ended: false, error: null,
 })
 
 const STATUS_FROM_MESSAGE: Record<string, JobStatus> = {
@@ -34,6 +35,8 @@ export function applyEvent(s: Stream, e: JobEvent): Stream {
     next.status = STATUS_FROM_MESSAGE[e.message] ?? s.status
   } else if (e.kind === 'plan') {
     next.interpretation = e.message
+    const tool = (e.data as { plan?: { tool?: unknown } } | null)?.plan?.tool
+    next.tool = typeof tool === 'string' ? tool : s.tool
   } else if (e.kind === 'progress') {
     next.message = e.message
     const d = e.data as { done?: number; total?: number } | null

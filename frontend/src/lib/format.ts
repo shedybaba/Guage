@@ -53,3 +53,16 @@ export const TOOL_NAMES: Record<string, string> = {
   growth_over_time: 'Growth',
   rotation_rate: 'Rotation speed',
 }
+
+/** One line of filming advice for the kind of measurement being made (shown while Gauge works). */
+export const FILMING_TIPS: Record<string, string> = {
+  pendulum_period: 'Let it swing at least five times, with the camera propped still and the whole swing in view.',
+  oscillation_frequency: 'Film at least five bounces from the side, with the camera still and the mass fully in view.',
+  free_fall: 'Film the drop in slow motion (120 or 240 frames per second) with a ruler or known length in the same plane as the fall.',
+  velocity_acceleration: 'Keep a ruler or known length in the same plane as the motion, and use slow motion for fast movement.',
+  collision_momentum: 'Use slow motion and a camera that does not move: at 30 frames per second an impact can fall between two frames, and a shaky camera breaks the momentum figures.',
+  count_objects: 'Keep the camera still and every object fully visible at some moment; heavy overlap makes any count less sure.',
+  line_crossings: 'Keep the camera still. A moving camera drags still objects across the line and they get counted.',
+  growth_over_time: 'Keep the camera and the object in place the whole time, and tell Gauge how long the video covers so it can give a rate.',
+  rotation_rate: 'Mark the spinning part with a sticker or dot. Fast rotation needs slow motion: from about half a turn per frame, no software can tell the speed.',
+}

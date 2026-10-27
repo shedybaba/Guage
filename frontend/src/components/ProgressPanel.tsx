@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { STAGES, stageIndex } from '../lib/format'
+import { FILMING_TIPS, STAGES, stageIndex } from '../lib/format'
 import type { Stream } from '../lib/events'
 import type { Job, JobStatus } from '../types'
 import { CheckIcon } from './ChecksList'
@@ -10,6 +10,7 @@ export function ProgressPanel({ job, stream }: { job: Job; stream: Stream }) {
   const progress = Math.max(job.progress ?? 0, stream.progress)
   const message = stream.message || job.message || 'Waiting to start'
   const interpretation = stream.interpretation || job.plan?.interpretation
+  const tip = FILMING_TIPS[stream.tool ?? job.plan?.tool ?? '']
   const list = useRef<HTMLUListElement>(null)
   // keep the newest line in view by scrolling the log itself, never the page
   useEffect(() => { if (list.current) list.current.scrollTop = list.current.scrollHeight }, [stream.log.length])
@@ -43,6 +44,10 @@ export function ProgressPanel({ job, stream }: { job: Job; stream: Stream }) {
 
       {interpretation && (
         <p className="rounded-lg border border-line bg-paper px-3 py-2 text-sm"><span className="font-semibold">Gauge understood: </span>{interpretation}</p>
+      )}
+
+      {tip && (
+        <p className="rounded-lg border border-line bg-paper-2 px-3 py-2 text-sm text-ink-soft"><span className="font-semibold text-ink">For best results: </span>{tip}</p>
       )}
 
       {stream.log.length > 0 && (

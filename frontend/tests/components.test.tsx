@@ -182,6 +182,15 @@ describe('ProgressPanel', () => {
     expect(screen.getByRole('img', { name: 'problem found' })).toBeInTheDocument()
     expect(screen.getByText('36%')).toBeInTheDocument()
   })
+  it('gives filming advice for the measurement being made, once the plan is known', () => {
+    const none = render(<ProgressPanel job={job({ status: 'planning', progress: 0, result: null, plan: null })} stream={emptyStream()} />)
+    expect(screen.queryByText(/For best results/)).not.toBeInTheDocument()
+    none.unmount()
+    const s = applyEvent(emptyStream(), { id: 1, ts: 1, kind: 'plan', message: 'Check momentum.', data: { plan: { tool: 'collision_momentum' } } })
+    expect(s.tool).toBe('collision_momentum')
+    render(<ProgressPanel job={job({ status: 'tracking', progress: 0.2, result: null, plan: null })} stream={s} />)
+    expect(screen.getByText(/For best results/).parentElement).toHaveTextContent(/slow motion and a camera that does not move/)
+  })
   it('starts from a clean slate', () => {
     render(<ProgressPanel job={job({ status: 'queued', progress: 0, result: null, message: 'Waiting to start' })} stream={emptyStream()} />)
     expect(screen.getByText('Waiting to start')).toBeInTheDocument()
