@@ -35,4 +35,8 @@ MAX_FRAMES = _int("GAUGE_MAX_FRAMES", 15000)  # SAM's own limit for one clip
 MIN_FRAMES = 20
 MAX_AUDIO_MB = _int("GAUGE_MAX_AUDIO_MB", 5)  # a 30 s question is well under 1 MB
 VOICE_PER_HOUR = _int("GAUGE_VOICE_PER_HOUR", 300)  # at $0.18 per hour of audio this costs almost nothing
+# per visitor, per hour (0 switches a limit off); the global limits for everyone together are in jobs.py
+VISITOR_QUESTIONS_PER_HOUR = _int("GAUGE_VISITOR_QUESTIONS_PER_HOUR", 40)
+VISITOR_UPLOADS_PER_HOUR = _int("GAUGE_VISITOR_UPLOADS_PER_HOUR", 15)
+VISITOR_VOICE_PER_HOUR = _int("GAUGE_VISITOR_VOICE_PER_HOUR", 60)
 CORS_ORIGINS = [o.strip() for o in os.getenv("GAUGE_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if o.strip()]

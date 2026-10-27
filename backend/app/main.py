@@ -33,7 +33,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Str
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, sam, transcribe, video
+from . import config, sam, transcribe, video, visitors
 from .jobs import ALLOWED_KNOWN, JobRunner, Limits, SubmitError
 from .store import TERMINAL, Store, new_id
 from .tools.registry import KNOWN_VALUE_KEYS
@@ -136,6 +136,7 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
             log.warning("marked %d unfinished job(s) as failed after a restart", stale)
         app.state.transcriber = transcriber or transcribe.MetaTranscriber()
         app.state.voice_times = []
+        app.state.visitors = visitors.VisitorLimiter()
         if runner is not None:
             app.state.runner = runner
         else:
@@ -248,6 +249,8 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
         recent[:] = [t for t in recent if now - t < 3600]
         if len(recent) >= config.VOICE_PER_HOUR:
             raise HTTPException(429, "Too many voice questions in the last hour. Please type your question instead.")
+        request.app.state.visitors.check(request, "voice", config.VISITOR_VOICE_PER_HOUR,
+                                         "You have used a lot of voice questions this hour. Please type your question instead.")
         data = await file.read(config.MAX_AUDIO_MB * 1024 * 1024 + 1)
         if not data:
             raise HTTPException(400, "The recording is empty.")
@@ -279,6 +282,8 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
     # ------------------------------------------------------------------ videos
     @app.post("/api/videos", status_code=201)
     async def upload_video(request: Request, file: UploadFile):
+        request.app.state.visitors.check(request, "uploads", config.VISITOR_UPLOADS_PER_HOUR,
+                                         "You have uploaded a lot of videos this hour. Please try again later.")
         s, vid = st(request), new_id()
         folder = request.app.state.data_dir / "videos" / vid
         folder.mkdir(parents=True, exist_ok=True)
@@ -373,6 +378,8 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
 
     # ------------------------------------------------------------------ questions and jobs
     async def submit(request, video_id, question, known, parent=None):
+        request.app.state.visitors.check(request, "questions", config.VISITOR_QUESTIONS_PER_HOUR,
+                                         "You have asked a lot of questions this hour. Please try again later.")
         try:
             return await request.app.state.runner.submit(video_id, question, known, parent)
         except SubmitError as e:

@@ -475,3 +475,24 @@ def test_the_probe_reports_what_happened_from_this_server_without_leaking(client
     assert all(v["worked"] is False for v in body["muse_spark"].values())
     monkeypatch.setattr(mc, "async_client", lambda: (_ for _ in ()).throw(AssertionError("must be cached")))
     assert client.get("/api/health/probe").json() == body  # cached: a second call makes no new request
+
+
+# ------------------------------------------------------------ per-visitor limits
+def test_one_visitor_is_limited_but_another_is_not(client, video_id, monkeypatch):
+    monkeypatch.setattr(config, "VISITOR_QUESTIONS_PER_HOUR", 2)
+    mine, other = {"x-forwarded-for": "203.0.113.1"}, {"x-forwarded-for": "203.0.113.2"}
+    body = {"question": "What is the swing period?"}
+    url = f"/api/videos/{video_id}/questions"
+    assert client.post(url, json=body, headers=mine).status_code == 202
+    assert client.post(url, json=body, headers=mine).status_code == 202
+    third = client.post(url, json=body, headers=mine)
+    assert third.status_code == 429 and "a lot of questions" in third.json()["detail"]
+    assert client.post(url, json=body, headers=other).status_code == 202
+
+
+def test_uploads_are_limited_per_visitor(client, clip_bytes, monkeypatch):
+    monkeypatch.setattr(config, "VISITOR_UPLOADS_PER_HOUR", 1)
+    h = {"x-forwarded-for": "203.0.113.7"}
+    assert client.post("/api/videos", files={"file": ("a.mp4", clip_bytes, "video/mp4")}, headers=h).status_code == 201
+    r = client.post("/api/videos", files={"file": ("b.mp4", clip_bytes, "video/mp4")}, headers=h)
+    assert r.status_code == 429
