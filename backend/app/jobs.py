@@ -39,6 +39,16 @@ class SubmitError(Exception):
         self.status, self.message = status, message
 
 
+def describe_failure(exc):
+    """What went wrong with a model call, safe to log: the exception types and the HTTP status, never the message."""
+    parts, e = [], exc
+    while e is not None and len(parts) < 4:
+        status = getattr(e, "status_code", None)
+        parts.append(type(e).__name__ + (f" (HTTP {status})" if status else ""))
+        e = e.__cause__
+    return " <- ".join(parts)
+
+
 @dataclass
 class Limits:
     max_active: int = 2  # jobs working at the same time
@@ -179,7 +189,8 @@ class JobRunner:
                                    video={"width": info.width, "height": info.height, "fps": info.fps, "duration": info.duration},
                                    keyframes=frames, known_values=plan_known,
                                    previous_plan=Plan.from_dict(prev) if prev else None)
-        except PlannerError:
+        except PlannerError as e:
+            log.warning("planning failed: %s", describe_failure(e))  # the kind of failure only; never any key or message text
             self._fail(job_id, "Gauge could not read the question just now (the language model did not answer). "
                                "Please try again.", "planner")
             return

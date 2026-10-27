@@ -309,3 +309,24 @@ def test_known_values_are_cleaned():
                                "reference_object": " metre stick ", "time_s": True}) == \
         {"string_length_m": 0.5, "reference_object": "metre stick"}
     assert clean_known_values(None) == {}
+
+
+def test_a_model_failure_is_described_without_leaking_its_message():
+    import httpx
+    import openai
+    from app.jobs import describe_failure
+    from app.llm import LLMError
+    from app.planner import PlannerError
+    req = httpx.Request("POST", "https://api.meta.ai/v1/responses")
+    api = openai.AuthenticationError("Incorrect API key provided: sk-SECRET123", response=httpx.Response(401, request=req), body=None)
+    try:
+        try:
+            try:
+                raise api
+            except openai.APIStatusError as e:
+                raise LLMError("The model request failed") from e
+        except LLMError as e:
+            raise PlannerError(str(e)) from e
+    except PlannerError as e:
+        text = describe_failure(e)
+    assert "AuthenticationError (HTTP 401)" in text and "SECRET" not in text and "Incorrect" not in text
