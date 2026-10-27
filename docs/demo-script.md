@@ -49,3 +49,5 @@ Show `/developers` for two seconds.
 - A mass on a spring (known mass, spring held still, slow motion if you can): frequency and spring constant.
 - Parts or any objects moving across the frame (counting and a rate per minute). A belt, a tray, or a time-lapse works.
 - A dropped ball next to a ruler or metre stick, filmed in slow motion: free fall and g.
+- A fan or wheel with a sticker on it, filmed in slow motion if it is fast: rotation speed in rpm.
+- A time-lapse of a plant, dough rising or anything that slowly grows (say how long the clip covers): growth.

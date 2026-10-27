@@ -15,8 +15,10 @@ from .quality import track_with_checks
 from .store import jsonable
 from .tools.collision import collision_momentum
 from .tools.counting import count_objects, line_crossings
+from .tools.growth import growth_over_time
 from .tools.kinematics import free_fall, velocity_acceleration
 from .tools.pendulum import pendulum_period
+from .tools.rotation import rotation_rate
 from .tools.spring import oscillation_frequency
 
 SCALE_NEEDED = ("free_fall", "velocity_acceleration")
@@ -77,6 +79,30 @@ def values_si(plan):
     return {k: e.value for k, e in plan.values.items()}
 
 
+def timelapse_speedup(values, timestamps):
+    """Real seconds that pass per second of video, from what the user said about the time-lapse (or None).
+
+    `values` are SI values (seconds). "The video covers 3 days" gives 3 days / the video's length; "a photo every
+    10 minutes" gives 10 minutes / the time between frames.
+    """
+    t = np.asarray(timestamps, float)
+    if len(t) < 2:
+        return None
+    if "real_duration" in values and t[-1] > t[0]:
+        return values["real_duration"] / float(t[-1] - t[0])
+    if "frame_interval" in values:
+        return values["frame_interval"] / float(np.median(np.diff(t)))
+    return None
+
+
+def size_series(points, object_id, timestamps, quantity):
+    """Time and size of one tracked object in every frame: its box height or width, or its mask area (pixels)."""
+    pts = sorted((p for p in points if p.object_id == object_id and p.frame < len(timestamps)), key=lambda p: p.frame)
+    t = np.array([timestamps[p.frame] for p in pts])
+    pick = {"height": lambda p: p.y2 - p.y1, "width": lambda p: p.x2 - p.x1}.get(quantity, lambda p: p.area)
+    return t, np.array([pick(p) for p in pts], float)
+
+
 def run_tool(plan, checked, info, scale):
     """Run the planned tool on the tracked objects. `scale` is a ScaleInfo or None."""
     v = values_si(plan)
@@ -96,6 +122,15 @@ def run_tool(plan, checked, info, scale):
             return free_fall(s["t"], s["x"], s["y"], scale_m_per_px=m_per_px, scale_uncertainty_fraction=rel)
         return velocity_acceleration(s["t"], s["x"], s["y"], scale_m_per_px=m_per_px, scale_uncertainty_fraction=rel,
                                      quantity=plan.quantity, at_time=v.get("time"), ramp_angle_deg=v.get("ramp_angle"))
+    if plan.tool in ("growth_over_time", "rotation_rate"):
+        main = signals.pick_main_object(points)
+        if plan.tool == "rotation_rate":
+            s = signals.series_for_object(points, main, info.timestamps)
+            return rotation_rate(s["t"], s["x"], s["y"])
+        t, size = size_series(points, main, info.timestamps, plan.quantity)
+        return growth_over_time(t, size, plan.quantity or "area", scale_m_per_px=m_per_px, scale_uncertainty_fraction=rel,
+                                speedup=timelapse_speedup(v, info.timestamps),
+                                coverage=len(size) / max(info.frame_count, 1))
     if plan.tool == "collision_momentum":
         t, pos, sizes = signals.positions_from_tracks(checked.tracks, info.timestamps)
         masses = {k: v["mass"] for k in pos} if "mass" in v else None

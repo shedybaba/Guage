@@ -155,9 +155,48 @@ def test_an_invented_tool_name_is_treated_as_unsupported():
     assert p.unsupported is not None
 
 
-def test_a_planned_but_unbuilt_tool_is_unsupported_for_now():
+def test_a_planned_but_unbuilt_tool_is_unsupported_for_now(monkeypatch):
+    import dataclasses
+    from app import planner
+    monkeypatch.setitem(planner.TOOLS, "growth_over_time", dataclasses.replace(planner.TOOLS["growth_over_time"], available=False))
     p = plan_for("How fast does the plant grow?", draft(tool="growth_over_time"))
     assert p.unsupported is not None
+
+
+def growth_draft(**over):
+    base = dict(tool="growth_over_time", outputs=["total_change"], quantity="height",
+                targets=[{"role": "main", "phrases": ["green plant"]}])
+    return draft(**{**base, **over})
+
+
+def test_growth_total_change_needs_no_time():
+    p = plan_for("How much did the plant grow?", growth_draft())
+    assert p.tool == "growth_over_time" and p.ready and p.quantity == "height"
+
+
+def test_a_growth_rate_asks_how_much_real_time_the_video_covers():
+    p = plan_for("How fast does the plant grow?", growth_draft(outputs=["growth_rate"]))
+    assert [m.name for m in p.missing] == ["real_duration"] and p.missing[0].dimension == "duration" and not p.ready
+
+
+def test_the_real_time_of_a_time_lapse_is_read_from_the_question_and_converted_by_code():
+    q = "How fast does the plant grow? The video covers 3 days."
+    p = plan_for(q, growth_draft(outputs=["growth_rate"], values=[value("real_duration", 3, "days", "covers 3 days")]))
+    assert p.ready and p.values["real_duration"].value == 3 * 86400 and not p.values["real_duration"].needs_confirmation
+    p = plan_for("a photo every ten minutes", growth_draft(outputs=["doubling_time"], values=[value("frame_interval", 10, "minutes", "ten minutes")]))
+    assert p.ready and p.values["frame_interval"].value == 600
+
+
+def test_growth_quantity_defaults_to_area_and_other_tools_ignore_it():
+    assert plan_for("q", growth_draft(quantity=None)).quantity == "area"
+    assert plan_for("q", draft(quantity="height")).quantity is None  # a pendulum has no 'height' quantity
+    assert plan_for("q", growth_draft(quantity="speed")).quantity == "area"
+
+
+def test_rotation_plan_needs_nothing_else():
+    p = plan_for("How many rpm does the fan turn at?", draft(tool="rotation_rate", outputs=["rpm"],
+                 targets=[{"role": "main", "phrases": ["red sticker", "white dot"]}]))
+    assert p.tool == "rotation_rate" and p.ready and p.main_phrases == ["red sticker", "white dot"]
 
 
 def test_outputs_the_tool_cannot_give_are_dropped_with_a_note():
@@ -318,7 +357,8 @@ def test_the_request_carries_the_question_the_frames_and_the_rules():
 def test_the_schema_is_strict_compatible():
     s = plan_schema()
     assert s["additionalProperties"] is False and set(s["required"]) == set(s["properties"])
-    assert "unsupported" in s["properties"]["tool"]["enum"] and "growth_over_time" not in s["properties"]["tool"]["enum"]
+    assert "unsupported" in s["properties"]["tool"]["enum"] and "growth_over_time" in s["properties"]["tool"]["enum"]
+    assert {"height", "width", "area"} <= set(s["properties"]["quantity"]["anyOf"][0]["enum"])
 
 
 def test_a_follow_up_gets_the_earlier_context():
@@ -343,11 +383,12 @@ def test_an_empty_question_is_refused_without_calling_the_model():
 
 
 def test_the_prompt_lists_every_available_tool_and_no_unavailable_one():
+    from app.tools.registry import AVAILABLE, TOOLS
     text = build_instructions()
     for name in ("pendulum_period", "oscillation_frequency", "free_fall", "velocity_acceleration", "collision_momentum",
-                 "count_objects", "line_crossings"):
+                 "count_objects", "line_crossings", "growth_over_time", "rotation_rate"):
         assert name in text
-    assert "growth_over_time" not in text and "rotation_rate" not in text
+    assert all(n in text for n in AVAILABLE) and not [n for n, t in TOOLS.items() if not t.available and n in text]
 
 
 def test_to_dict_is_json_ready():

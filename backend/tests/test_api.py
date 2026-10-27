@@ -380,3 +380,48 @@ def test_the_server_starts_without_a_model_key_and_fails_questions_plainly(tmp_p
         j = wait(c, job)
         assert j["status"] == "failed"
         assert "MODEL_API_KEY" not in str(j)  # the user is not shown configuration details
+
+
+# ------------------------------------------------------------ rotation and growth through the whole chain
+
+def test_rotation_speed_is_measured_through_the_api(client, video_id):
+    j = wait(client, ask(client, video_id, "How many rpm does the fan turn at?"))
+    assert j["status"] == "done" and j["result"]["kind"] == "measurement" and j["result"]["tool"] == "rotation_rate"
+    head = j["result"]["headline"]
+    assert head["units"] == "rpm" and head["value"] == pytest.approx(90.0, rel=0.01)
+    assert {"t", "turns", "fitted"} <= set(j["result"]["chart"])
+    assert any(n["id"] == "frequency" for n in j["result"]["numbers"])
+
+
+def test_total_growth_needs_no_time_and_is_measured(client, video_id):
+    j = wait(client, ask(client, video_id, "How much did the plant grow?"))
+    assert j["status"] == "done" and j["result"]["tool"] == "growth_over_time"
+    head = j["result"]["headline"]
+    assert head["units"] == "%" and head["value"] == pytest.approx(133.0, abs=6.0)
+    assert any("No real time" in w for w in j["result"]["warnings"])  # the rate cannot be given, and it says so
+
+
+def test_a_growth_rate_asks_how_long_the_time_lapse_covers_then_answers(client, video_id):
+    first = wait(client, ask(client, video_id, "How fast does the plant grow?"))
+    assert first["status"] == "needs_input"
+    miss = first["needs"]["missing"]
+    assert [m["name"] for m in miss] == ["real_duration"] and miss[0]["dimension"] == "duration"
+    assert client.harness.tracker_calls == 0  # nothing was tracked or billed while it waited
+    r = client.post(f"/api/jobs/{first['job_id']}/answers", json={"answers": {"real_duration": {"value": 3, "unit": "days"}}})
+    assert r.status_code == 202, r.text
+    j = wait(client, r.json()["job_id"])
+    assert j["status"] == "done" and j["result"]["headline"]["label"] == "Average growth rate"
+    assert "/" in j["result"]["headline"]["units"]
+
+
+def test_the_time_lapse_length_can_be_said_in_the_question(client, video_id):
+    j = wait(client, ask(client, video_id, "At what rate does the plant grow over three days?"))
+    assert j["status"] == "done" and j["result"]["headline"]["label"] == "Average growth rate"
+    assert any(i["label"].startswith("real duration") for i in j["result"]["inputs"])
+
+
+def test_answers_for_the_time_lapse_are_validated(client, video_id):
+    first = wait(client, ask(client, video_id, "How fast does the plant grow?"))
+    url = f"/api/jobs/{first['job_id']}/answers"
+    assert client.post(url, json={"answers": {"real_duration": {"value": 3, "unit": "kg"}}}).status_code == 422  # wrong kind of unit
+    assert client.post(url, json={"answers": {"real_duration": {"value": 0.1, "unit": "s"}}}).status_code == 422  # absurdly short

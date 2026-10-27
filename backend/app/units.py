@@ -20,8 +20,11 @@ ANGLE = {"deg": 1.0, "degree": 1.0, "degrees": 1.0, "°": 1.0, "rad": 180 / math
          "radians": 180 / math.pi}
 TIME = {"s": 1.0, "sec": 1.0, "secs": 1.0, "second": 1.0, "seconds": 1.0, "ms": 0.001, "min": 60.0, "minute": 60.0,
         "minutes": 60.0}
-UNIT_TABLES = {"length": LENGTH, "mass": MASS, "angle": ANGLE, "time": TIME}
-SI_NAME = {"length": "m", "mass": "kg", "angle": "degrees", "time": "s"}
+# how long a time-lapse covers in real life, or the gap between its frames
+DURATION = {**TIME, "h": 3600.0, "hr": 3600.0, "hrs": 3600.0, "hour": 3600.0, "hours": 3600.0, "d": 86400.0, "day": 86400.0,
+            "days": 86400.0, "week": 604800.0, "weeks": 604800.0}
+UNIT_TABLES = {"length": LENGTH, "mass": MASS, "angle": ANGLE, "time": TIME, "duration": DURATION}
+SI_NAME = {"length": "m", "mass": "kg", "angle": "degrees", "time": "s", "duration": "s"}
 
 # what each named value is, and a sane range in SI units (outside it we ask the user to confirm)
 QUANTITIES = {
@@ -31,6 +34,8 @@ QUANTITIES = {
     "reference_length": ("length", 0.005, 100.0),
     "ramp_angle": ("angle", 0.5, 89.0),
     "time": ("time", 0.0, 3600.0),
+    "real_duration": ("duration", 1.0, 3.2e7),  # the real time a whole time-lapse covers: a second to a year
+    "frame_interval": ("duration", 0.01, 1e6),  # the real time between two frames
 }
 
 

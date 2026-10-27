@@ -230,9 +230,74 @@ def _crossings(r, plan):
     return head, nums, statements, method, []
 
 
+def _growth(r, plan):
+    x = r["extra"]
+    outs = plan.outputs if plan else ["total_change"]
+    q = x["quantity"]
+    what = {"height": "height", "width": "width", "area": "area"}[q]
+    change = _sub("total_change", f"Total change in {what}", x["total_change_percent"])
+    nums = [change, _sub("start_size", f"{what.capitalize()} at the start", x["start_size"]),
+            _sub("end_size", f"{what.capitalize()} at the end", x["end_size"]),
+            _sub("absolute_change", f"Change in {what}", x["absolute_change"])]
+    statements = list(x.get("statements", []))
+    head = change
+    if "growth_rate" in x:
+        rate = _sub("growth_rate", "Average growth rate", x["growth_rate"])
+        rel = _sub("relative_growth_rate", "Average relative growth rate", x["relative_growth_rate"])
+        nums += [rate, rel, _sub("real_duration", "Real time covered by the video", x["real_duration"])]
+        if "growth_rate" in outs:
+            head = rate
+    if "doubling_time" in x:
+        dbl = _sub("doubling_time", "Doubling time at the average growth rate", x["doubling_time"])
+        nums.append(dbl)
+        if "doubling_time" in outs:
+            head = dbl
+    elif "doubling_time" in outs:
+        statements.append("No doubling time can be stated: the object did not grow by more than the measurement's uncertainty."
+                          if "growth_rate" in x else "No doubling time can be stated without the real time the video covers.")
+    if not x["grew_measurably"]:
+        statements.append("The size at the end is not different from the size at the start by more than the measurement's "
+                          "uncertainty.")
+    method = ["The object was found and followed in every frame, and its " + ("outline's height" if q == "height" else
+              "outline's width" if q == "width" else "outline area") + " was read in each one.",
+              "The size at the start and at the end came from short straight lines fitted to the first and last frames, "
+              "so a single odd frame does not decide the answer.",
+              "The uncertainty comes from how much the sizes scatter around the trend, widened because neighbouring frames "
+              "share errors."]
+    formulas = ["change = (end size - start size) / start size"]
+    if "growth_rate" in x:
+        formulas += ["growth rate = (end size - start size) / real time", "doubling time = ln 2 / relative growth rate"]
+        if x.get("real_time_known"):
+            method.append("Real time comes from what you said about how long the time-lapse covers.")
+    return head, nums, statements, method, formulas
+
+
+def _rotation(r, plan):
+    x, fq = r["extra"], r["fit_quality"]
+    rpm = _fact("rpm", "Rotation speed", r["value"], r["uncertainty"], "rpm")
+    turns = _sub("revolutions", "Revolutions in the part used", x["revolutions"])
+    nums = [rpm, _sub("frequency", "Rotation frequency", x["frequency"]), _sub("period", "Time for one revolution", x["period"]),
+            turns, _sub("angular_speed", "Angular speed", x["angular_speed"]),
+            _fact("frames_per_rev", "Frames per revolution", fq["frames_per_revolution"], None, "", sig=3)]
+    seg = fq["segment"]
+    if seg["trimmed"]:
+        nums.append(_fact("used_from", "Used from", seg["start_s"], None, "s"))
+        nums.append(_fact("used_to", "Used until", seg["end_s"], None, "s"))
+    if x.get("fft_rpm") is not None:
+        nums.append(_fact("fft_rpm", "Check by Fourier analysis", x["fft_rpm"], None, "rpm"))
+    head = turns if plan and "revolutions" in plan.outputs and "rpm" not in plan.outputs else rpm
+    statements = [f"As seen in the video, the marker goes round {x['direction']}."]
+    method = ["The marker was found and followed in every frame.",
+              "A circle was fitted to its path to find the axis, the marker's angle round that axis was counted in whole turns, "
+              "and a straight line was fitted to the angle over time: its slope is the rotation speed.",
+              "This assumes the marker turns less than half a turn between two frames; a much faster rotation would look "
+              "slower, or even backward, on camera."]
+    return head, nums, statements, method, ["rpm = angular speed x 30 / pi"]
+
+
 BUILDERS = {"pendulum_period": _pendulum, "oscillation_frequency": _spring, "free_fall": _free_fall,
             "velocity_acceleration": _kinematics, "collision_momentum": _collision, "count_objects": _count,
-            "line_crossings": _crossings}
+            "line_crossings": _crossings, "growth_over_time": _growth, "rotation_rate": _rotation}
 
 
 def _relevant_warnings(tool, result, plan):

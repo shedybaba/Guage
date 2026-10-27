@@ -49,6 +49,18 @@ ROUTES = {
                                  targets=[{"role": "main", "phrases": ["ball"]}], values=[value("reference_length", 1, "m", "1 m")]),
     "find the ghost": draft(targets=[{"role": "main", "phrases": ["unicorn"]}]),
     "still object": draft(targets=[{"role": "main", "phrases": ["rock"]}]),
+    "how many rpm": draft(tool="rotation_rate", outputs=["rpm"], interpretation="Measure the rotation speed of the fan.",
+                          targets=[{"role": "main", "phrases": ["red sticker"]}]),
+    "how much did the plant grow": draft(tool="growth_over_time", outputs=["total_change"], quantity="height",
+                                         interpretation="Measure how much the plant grew.",
+                                         targets=[{"role": "main", "phrases": ["green plant"]}]),
+    "how fast does the plant grow": draft(tool="growth_over_time", outputs=["growth_rate"], quantity="height",
+                                          interpretation="Measure how fast the plant grows.",
+                                          targets=[{"role": "main", "phrases": ["green plant"]}]),
+    "plant grow over three days": draft(tool="growth_over_time", outputs=["growth_rate"], quantity="height",
+                                        interpretation="Measure how fast the plant grows.",
+                                        targets=[{"role": "main", "phrases": ["green plant"]}],
+                                        values=[value("real_duration", 3, "days", "three days")]),
     "count them": draft(tool="count_objects", outputs=["count"], interpretation="Count the parts.",
                         targets=[{"role": "main", "phrases": ["part"]}]),
 }
@@ -99,6 +111,13 @@ def world(phrase, n):
         return [pt(f, 0, 160 + rng.normal(0, 0.15), y[f] + rng.normal(0, 0.15)) for f in range(n)]
     if phrase == "metre stick":
         return [pt(f, 0, 40, 120 + rng.normal(0, 0.1), size=10.0, long_side=250.0) for f in range(n)]
+    if phrase == "red sticker":  # a marker going round a fan hub at 90 rpm (1.5 turns a second)
+        ang = 2 * np.pi * 1.5 * t
+        return [pt(f, 0, 160 + 60 * np.cos(ang[f]) + rng.normal(0, 0.3), 120 - 60 * np.sin(ang[f]) + rng.normal(0, 0.3), size=10.0)
+                for f in range(n)]
+    if phrase == "green plant":  # a time-lapse: the plant's outline grows from 60 to 140 pixels tall, 133%
+        return [pt(f, 0, 160, 200 - (60 + 80 * f / n) / 2 + rng.normal(0, 0.2), size=60 + 80 * f / n + rng.normal(0, 0.3))
+                for f in range(n)]
     if phrase == "rock":
         return [pt(f, 0, 100 + rng.normal(0, 0.1), 100 + rng.normal(0, 0.1)) for f in range(n)]
     if phrase == "part":  # three parts crossing the picture left to right

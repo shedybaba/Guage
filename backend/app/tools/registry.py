@@ -23,6 +23,8 @@ OUTPUT_LABELS = {
     "speed": "speed", "average_speed": "average speed", "momentum_change": "change of momentum across a collision",
     "momentum": "momentum before and after a collision", "count": "number of objects",
     "crossings": "number of crossings of a line", "rate_per_minute": "rate of crossings per minute",
+    "total_change": "total change in size", "growth_rate": "growth rate", "doubling_time": "doubling time",
+    "rpm": "rotation speed (rpm)", "revolutions": "number of revolutions",
 }
 
 TOOLS = {t.name: t for t in (
@@ -61,9 +63,19 @@ TOOLS = {t.name: t for t in (
              ("crossings", "rate_per_minute"), "several",
              "where the line is (default: the middle of the picture) and whether everything moves together (a belt)",
              ("How many parts crossed the line?", "How many parts per minute pass the middle?")),
-    ToolSpec("growth_over_time", False, "Growth of something over a time-lapse (a plant, dough).", ("growth",),
-             "one", "", ()),
-    ToolSpec("rotation_rate", False, "Rotation speed (rpm) of a fan or wheel with a marker.", ("rpm",), "one", "", ()),
+    ToolSpec("growth_over_time", True,
+             "How much something grew over a time-lapse (a plant, dough, a crystal): its total change in size, its growth "
+             "rate and its doubling time. Its height, width or area is followed frame by frame.",
+             ("total_change", "growth_rate", "doubling_time"), "one",
+             "how much real time the whole video covers, or the time between two frames (needed for a rate); a known "
+             "length in the picture for sizes in real units",
+             ("How much did the plant grow?", "How fast is the dough rising? The video covers 3 hours.")),
+    ToolSpec("rotation_rate", True,
+             "Rotation speed (rpm), direction and number of turns of a fan, wheel or shaft, from a small marker (a sticker, "
+             "a painted dot, a blade tip) that goes round with it.",
+             ("rpm", "revolutions"), "one",
+             "nothing (the marker must be in view and the rotation not too fast for the frame rate)",
+             ("How many rpm does the fan turn at?", "How many revolutions did the wheel make?")),
 )}
 
 AVAILABLE = {k: v for k, v in TOOLS.items() if v.available}
@@ -77,10 +89,12 @@ REFERENCES = {
 }
 
 # names of values the user may state, and the question asked when one is missing
-VALUE_NAMES = ("string_length", "mass", "spring_mass", "reference_length", "ramp_angle", "time")
+VALUE_NAMES = ("string_length", "mass", "spring_mass", "reference_length", "ramp_angle", "time", "real_duration",
+               "frame_interval")
 # the names a caller of the API may use for values, mapped to ours
 KNOWN_VALUE_KEYS = {"string_length_m": "string_length", "mass_kg": "mass", "spring_mass_kg": "spring_mass",
-                    "reference_length_m": "reference_length", "ramp_angle_deg": "ramp_angle", "time_s": "time"}
+                    "reference_length_m": "reference_length", "ramp_angle_deg": "ramp_angle", "time_s": "time",
+                    "real_duration_s": "real_duration", "frame_interval_s": "frame_interval"}
 ASKS = {
     "string_length": ("What is the length of the string, from the pivot to the centre of the bob? "
                       "(for example 0.5 m or 50 cm)", "length"),
@@ -89,6 +103,8 @@ ASKS = {
                          "(a ruler, a metre stick, a sheet of A4 paper)? Gauge uses it to turn pixels into metres.",
                          "length"),
     "ramp_angle": ("What is the angle of the ramp? (for example 20 degrees)", "angle"),
+    "real_duration": ("How much real time does the whole video cover, from its first frame to its last? (for example 3 days "
+                      "or 12 hours). A time-lapse plays much faster than real life.", "duration"),
     "object": ("What should Gauge measure? Describe the object in a few words (for example 'red ball').", None),
 }
 
@@ -124,6 +140,9 @@ def missing_inputs(tool, outputs, values, compare_with_ramp=False):
             out.append(_ask("mass"))
         if "reference_length" not in values:
             out.append(_ask("reference_length"))
+    elif tool == "growth_over_time" and {"growth_rate", "doubling_time"} & set(outputs) \
+            and "real_duration" not in values and "frame_interval" not in values:
+        out.append(_ask("real_duration"))
     return out
 
 
@@ -146,6 +165,8 @@ def used_values(tool, outputs, compare_with_ramp=False, quantity=None):
             used.add("time")
     elif tool == "collision_momentum" and "momentum" in outputs:
         used |= {"mass", "reference_length"}
+    elif tool == "growth_over_time":
+        used |= {"reference_length", "real_duration", "frame_interval"}
     return used
 
 

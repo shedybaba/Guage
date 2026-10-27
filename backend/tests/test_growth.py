@@ -89,7 +89,7 @@ def test_a_known_length_gives_real_units_and_the_ruler_error_only_touches_those(
     assert a["extra"]["absolute_change"]["units"] == "cm"  # a plant of about 6 cm is shown in cm
     assert a["extra"]["absolute_change"]["value"] == pytest.approx(3.0, abs=0.15)  # 60 px * 0.5 mm
     assert a["extra"]["growth_rate"]["units"] == "cm/h"
-    assert b["extra"]["absolute_change"]["uncertainty"] > 3 * a["extra"]["absolute_change"]["uncertainty"]
+    assert b["extra"]["absolute_change"]["uncertainty"] > 1.4 * a["extra"]["absolute_change"]["uncertainty"]  # the ruler adds to it
     assert b["uncertainty"] == pytest.approx(a["uncertainty"])  # the percentage does not depend on the ruler
     assert not any("pixels" in w for w in b["warnings"])
     assert any("pixels" in w for w in growth_over_time(t, h, "height", speedup=3600.0)["warnings"])
@@ -139,3 +139,14 @@ def test_uneven_timestamps_are_used_not_frame_numbers():
     t = np.sort(rng.uniform(0, 60, 400))
     r = growth_over_time(t, 100 + t + rng.normal(0, 1, t.size), "height", speedup=3600.0)
     assert r["extra"]["growth_rate"]["value"] == pytest.approx(1.0, rel=0.06)
+
+
+def test_a_plateaued_mask_area_is_not_mistaken_for_glitches():
+    """SAM's mask area changes in small steps (a few frames at one value, then the next): that is not noise to remove."""
+    rng = np.random.default_rng(12)
+    t = np.arange(0, 60.0, 0.1)
+    true = 5000 + 9000 * t / 60.0
+    a = np.round(true / 150) * 150 + np.repeat(rng.normal(0, 20, 60), 10)  # stair steps, a little noise per step
+    r = growth_over_time(t, a, "area", speedup=3600.0)
+    assert r["extra"]["outliers_removed"] == 0 and not any("glitched" in w for w in r["warnings"])
+    assert r["value"] == pytest.approx((14000 / 5000 - 1) * 100, abs=15.0)

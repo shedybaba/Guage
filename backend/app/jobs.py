@@ -23,6 +23,7 @@ from .planner import Plan, PlannerError, make_plan
 from .quality import track_objects_with_checks
 from .store import jsonable
 from .tools.registry import KNOWN_VALUE_KEYS, used_values
+from .units import QUANTITIES
 
 log = logging.getLogger("gauge.jobs")
 SAM_USD_PER_FRAME = 0.20 / 1000
@@ -289,6 +290,7 @@ class JobRunner:
         for name, v in plan.values.items():
             if name in wanted and v.needs_confirmation and v.source != "given":
                 confirm.append({"name": name, "said": v.said, "value": v.value, "unit": v.unit, "reason": v.note,
+                                "dimension": QUANTITIES[name][0],
                                 "question": f"Please confirm: is the {name.replace('_', ' ')} {v.said}"
                                             + (f" ({v.value:g} {v.unit})" if v.unit and v.said.replace(' ', '') != f"{v.value:g}{v.unit}" else "")
                                             + "?" + (f" {v.note}" if v.note else "")})

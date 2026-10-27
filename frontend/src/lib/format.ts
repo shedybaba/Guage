@@ -50,4 +50,6 @@ export const TOOL_NAMES: Record<string, string> = {
   collision_momentum: 'Collision',
   count_objects: 'Counting',
   line_crossings: 'Line crossings',
+  growth_over_time: 'Growth',
+  rotation_rate: 'Rotation speed',
 }

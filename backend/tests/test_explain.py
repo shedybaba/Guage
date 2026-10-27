@@ -67,7 +67,16 @@ def all_results():
     cnt_tracks = group(belt([0.0, 2.0, 4.0], n_frames=450))
     cnt = count_objects(cnt_tracks, times(450), (720, 1280))
     crs = line_crossings(group(belt([i * 2.0 for i in range(6)], n_frames=450)), times(450), (720, 1280))
-    return {"pendulum_period": (pend, plan_obj("pendulum_period", ["g"], {"string_length": (0.5, "0.5 m")}, question="g?")),
+    from tests.test_growth import clip
+    from tests.test_rotation import marker
+    from app.tools.growth import growth_over_time
+    from app.tools.rotation import rotation_rate
+    tg, hg = clip(lambda t: 100 + t, seed=1)
+    grow = growth_over_time(tg, hg, "height", scale_m_per_px=0.0005, scale_uncertainty_fraction=0.02, speedup=3600.0)
+    rot = rotation_rate(*marker(120.0, seed=1))
+    return {"growth_over_time": (grow, plan_obj("growth_over_time", ["growth_rate"], quantity="height")),
+            "rotation_rate": (rot, plan_obj("rotation_rate", ["rpm"])),
+            "pendulum_period": (pend, plan_obj("pendulum_period", ["g"], {"string_length": (0.5, "0.5 m")}, question="g?")),
             "oscillation_frequency": (spr, plan_obj("oscillation_frequency", ["spring_constant"], {"mass": (0.2, "200 g")})),
             "free_fall": (ff, plan_obj("free_fall", ["g"])),
             "velocity_acceleration": (va, plan_obj("velocity_acceleration", ["acceleration"], quantity="acceleration")),
@@ -102,6 +111,21 @@ def test_the_headline_follows_what_was_asked(results):
     r3, p3 = results["line_crossings"]
     assert build_facts("line_crossings", r3, p3).headline.id == "rate"
     assert build_facts("line_crossings", r3, plan_obj("line_crossings", ["crossings"])).headline.id == "crossings"
+
+
+def test_growth_and_rotation_headlines_follow_what_was_asked(results):
+    g, _ = results["growth_over_time"]
+    for out, expected in (("total_change", "total_change"), ("growth_rate", "growth_rate"), ("doubling_time", "doubling_time")):
+        assert build_facts("growth_over_time", g, plan_obj("growth_over_time", [out], quantity="height")).headline.id == expected
+    # a doubling time that cannot be stated is said so in words, not invented
+    flat = {**g, "extra": {k: v for k, v in g["extra"].items() if k != "doubling_time"}}
+    f = build_facts("growth_over_time", flat, plan_obj("growth_over_time", ["doubling_time"], quantity="height"))
+    assert f.headline.id == "total_change" and any("No doubling time" in s for s in f.statements)
+    r, _ = results["rotation_rate"]
+    assert build_facts("rotation_rate", r, plan_obj("rotation_rate", ["revolutions"])).headline.id == "revolutions"
+    f = build_facts("rotation_rate", r, plan_obj("rotation_rate", ["rpm"]))
+    assert f.headline.id == "rpm" and any("less than half a turn" in m for m in f.method)
+    assert any("counter-clockwise" in s for s in f.statements)
 
 
 def test_numbers_in_the_sheet_are_formatted_by_code(results):

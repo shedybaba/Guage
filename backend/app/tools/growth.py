@@ -25,6 +25,8 @@ END_FRACTION = 0.15  # the start and the end size come from lines fitted to the 
 MIN_END_SAMPLES = 8
 OUTLIER_SIGMAS = 6.0  # a size this far from its neighbours' median is a glitch of the outline, not growth
 MAX_RHO = 0.97
+EDGE_FRACTION = 0.01  # the outline's edge is good to 1% or a pixel
+EDGE_PIXELS = 1.0
 SHAPE_MARGIN = 0.8  # a model is called better only if its squared error is under 80% of the other's
 
 LENGTH_UNITS = {"height": "height", "width": "width"}
@@ -116,8 +118,11 @@ def growth_over_time(t, size, quantity="area", scale_m_per_px=None, scale_uncert
     w = max(5, (len(size) // 20) | 1)
     local = median_filter(size, size=w, mode="nearest")
     dev = size - local
-    sigma_local = 1.4826 * float(np.median(np.abs(dev - np.median(dev))))
-    keep = np.abs(dev) <= OUTLIER_SIGMAS * max(sigma_local, 1e-12 * float(np.median(size)))
+    # Masks change in small plateaus, so the typical deviation can be exactly zero: never trust a noise level below the
+    # rounding of the outline to whole pixels (the same floor the start and end sizes use).
+    floor = 0.29 if quantity != "area" else 1.2 * float(np.sqrt(np.median(size)))
+    sigma_local = max(1.4826 * float(np.median(np.abs(dev - np.median(dev)))), floor)
+    keep = np.abs(dev) <= OUTLIER_SIGMAS * sigma_local
     removed = int((~keep).sum())
     if removed:
         pct = 100 * removed / len(size)
@@ -154,12 +159,16 @@ def growth_over_time(t, size, quantity="area", scale_m_per_px=None, scale_uncert
 
     # start and end size: a short line fitted to each end, evaluated at the first / last frame
     m = min(max(MIN_END_SAMPLES, int(round(END_FRACTION * n))), n // 3)
-    floor = 0.29 if quantity != "area" else 1.2 * float(np.sqrt(np.median(size)))  # outline rounding to whole pixels
     s0, se0, rho0 = _edge_value(tau[:m], size[:m], tau[0], floor, rho)
     s1, se1, rho1 = _edge_value(tau[-m:], size[-m:], tau[-1], floor, rho)
     rho = max(rho, rho0, rho1)
     if s0 <= 0 or s1 <= 0:
         return _empty("The size at the start or the end could not be read reliably from the frames.")
+    # The outline's edge is only good to about 1% or a pixel (SAM's mask can be a few pixels generous), whichever is larger,
+    # and no number of frames averages that away; it matters most for small objects. (Same allowance as the scale ruler.)
+    edge = (lambda v: float(np.hypot(EDGE_FRACTION * v, EDGE_PIXELS))) if quantity != "area" else \
+           (lambda v: 2.0 * v * float(np.hypot(EDGE_FRACTION, EDGE_PIXELS / np.sqrt(v))))
+    se0, se1 = float(np.hypot(se0, edge(s0))), float(np.hypot(se1, edge(s1)))
     delta, d_unc = s1 - s0, float(np.hypot(se0, se1))
     R = s1 / s0
     R_unc = R * float(np.sqrt((se0 / s0) ** 2 + (se1 / s1) ** 2))
@@ -238,7 +247,7 @@ def growth_over_time(t, size, quantity="area", scale_m_per_px=None, scale_uncert
 
     # ---- the chart
     xs = tau / per if k else tau
-    series = {"t": [float(v) for v in xs], "t_unit": tu if k else "s", "y_label": f"{quantity} ({unit})",
+    series = {"t": [float(v) for v in xs], "t_unit": tu if k else "s", "real_time": bool(k), "y_label": f"{quantity} ({unit})",
               "measured": [float(v * conv) for v in size], "smooth": [float(v * conv) for v in smooth],
               "fitted": [float(v * conv) for v in pred], "fit_name": best}
     return {"value": pct, "uncertainty": pct_unc, "units": "%", "method": method,

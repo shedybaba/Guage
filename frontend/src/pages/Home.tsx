@@ -13,7 +13,7 @@ const PILLARS = [
   { title: 'You can check', text: 'Each number in the explanation is verified against the measured results. Gauge shows how it checked its own work, and warns when a result is shaky.' },
 ]
 
-const TOOLS = ['Pendulum period and g', 'Spring frequency, damping and k', 'Free fall', 'Speed and acceleration on a ramp', 'Momentum in a collision', 'Counting parts', 'Line crossings per minute']
+const TOOLS = ['Pendulum period and g', 'Spring frequency, damping and k', 'Free fall', 'Speed and acceleration on a ramp', 'Momentum in a collision', 'Counting parts', 'Line crossings per minute', 'Growth over a time-lapse', 'Rotation speed (rpm)']
 
 export default function Home() {
   return (

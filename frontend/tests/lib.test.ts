@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { applyEvent, emptyStream, parseSse } from '../src/lib/events'
 import { containFit, entryAt, nearestIndex } from '../src/lib/overlay'
 import { chartSpecs, decimate } from '../src/lib/chart'
-import { defaultUnit, parseNumber } from '../src/lib/answers'
+import { defaultUnit, niceDuration, parseNumber } from '../src/lib/answers'
 import { formatBytes, formatClock, formatDuration, formatUsd, stageIndex } from '../src/lib/format'
 import type { Fact, JobEvent, TrackObject } from '../src/types'
 
@@ -148,5 +148,36 @@ describe('answers and formatting', () => {
   })
   it('orders the stages', () => {
     expect(['queued', 'planning', 'tracking', 'measuring', 'explaining', 'done'].map((s) => stageIndex(s as never))).toEqual([-1, 0, 1, 2, 3, 4])
+  })
+})
+
+describe('growth and rotation charts', () => {
+  const num = (id: string, value: number) => ({ id, label: id, display: String(value), value, uncertainty: null, units: '' })
+  it('draws size over time in real time units when the time-lapse length is known', () => {
+    const specs = chartSpecs('growth_over_time', { t: [0, 1, 2], t_unit: 'h', real_time: true, y_label: 'height (cm)',
+      measured: [5, 6, 7], fitted: [5, 6, 7], fit_name: 'linear' })
+    expect(specs).toHaveLength(1)
+    expect(specs[0].xLabel).toBe('real time (h)')
+    expect(specs[0].yLabel).toBe('height (cm)')
+    expect(specs[0].series.map((s) => s.key)).toEqual(['measured', 'fitted'])
+  })
+  it('says it is video time when no real time was given', () => {
+    const [spec] = chartSpecs('growth_over_time', { t: [0, 1, 2], t_unit: 's', real_time: false, y_label: 'area (px²)', measured: [1, 2, 3], fitted: [1, 2, 3] })
+    expect(spec.xLabel).toBe('time in the video (s)')
+  })
+  it('draws turns over time and shades the stretch that was used', () => {
+    const [spec] = chartSpecs('rotation_rate', { t: [0, 1, 2], turns: [0, 2, 4], fitted: [0, 2, 4] }, [num('used_from', 0.5), num('used_to', 1.5)])
+    expect(spec.yLabel).toBe('turns (revolutions)')
+    expect(spec.areas).toEqual([{ x1: 0.5, x2: 1.5, label: 'used for the fit' }])
+  })
+})
+
+describe('niceDuration', () => {
+  it('shows a duration in the biggest sensible unit', () => {
+    expect(niceDuration(259200)).toEqual({ value: 3, unit: 'day' })
+    expect(niceDuration(43200)).toEqual({ value: 12, unit: 'h' })
+    expect(niceDuration(90)).toEqual({ value: 1.5, unit: 'min' })
+    expect(niceDuration(20)).toEqual({ value: 20, unit: 's' })
+    expect(niceDuration(1209600)).toEqual({ value: 2, unit: 'week' })
   })
 })

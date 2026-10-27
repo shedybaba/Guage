@@ -65,21 +65,26 @@ Every step is written to a visible log ("How Gauge checked its work"), live whil
 | `velocity_acceleration` | Speed, peak speed, acceleration along a path; on a ramp, compares with g·sinθ for sliding and for rolling bodies |
 | `collision_momentum` | Total momentum before and after each impact, kinetic-energy ratio, per-impact list; works without a scale as a percent change |
 | `count_objects`, `line_crossings` | Distinct objects, crossings of a line by direction, rate per minute |
+| `growth_over_time` | A time-lapse of a plant, dough or crystal: total change in height, width or area, growth rate and doubling time (a rate needs to know how much real time the video covers, so Gauge asks). Start and end sizes come from short lines fitted to each end, not from one frame; the uncertainty includes the outline's edge error |
+| `rotation_rate` | Rpm, direction and number of turns of a fan or wheel from a marker (a sticker or painted dot) that goes round with it. Finds the axis by fitting a circle, counts the marker's angle in whole turns, skips the resting part before and after, and cross-checks the speed with a Fourier analysis |
 
 **Uncertainty is meant to be honest.** For the pendulum, the quoted ± is the largest of three things: the fit's own error (widened for correlated noise), cycle-to-cycle scatter, and the limit set by the frame rate. The fit alone was far too optimistic on real clips.
 
 ## How it was checked
 
 - **Known answers first.** Every tool is tested on simulated motion with a known truth. The tools are calibrated on random simulated runs: the spring tool's 2σ interval covered the truth in 100 of 100 runs for frequency, damping and *k*; the free-fall and ramp tools were calibrated on 150 random runs each, with the scale error removed so the statistical part is tested on its own.
+- **Rendered clips with known answers, through the real chain.** A red dot circling at exactly 75 rpm was read as 75.000 ± 0.008 rpm (SAM found the sticker, a Fourier check agreed). A growing plant drawn 77% taller was read as +69.5%: the gap is SAM's outline being a few pixels generous at the start, which is why the growth uncertainty includes an edge allowance.
 - **Real clips second.** On two real pendulum videos the pendulum tool, the spring tool and the velocity tool agree with each other (frequency = 1/period exactly; peak speed from local fits within 0.4% and 4% of amplitude × ω). The line-crossing counter, with the line at the pendulum's rest position, finds the same swing timing as the pendulum tool (two crossings per swing). A Newton's cradle video gives exactly 7 objects.
 - **Failure paths are tested too:** a still object jittering by 0.1 px is *not* reported as a pendulum; an object that is hidden for 50 frames is re-acquired within 0.3 px of where SAM's own track says it is.
-- **Tests:** 424 backend tests and 85 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
+- **Tests:** 475 backend tests and 89 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
 
 ## Limits (stated plainly)
 
 - Needs a still camera for best results; camera motion is detected and warned about, not corrected.
 - Distances need a scale (a known length in the picture, said or typed). Without one, time-based measurements (period, frequency, counts) still work and distance-based ones are given in pixels with a warning.
 - At 30 fps fast events fall between frames: film in slow motion for collisions and drops. Gauge warns when the frame rate is the limit.
+- **The wagon-wheel effect cannot be detected.** A marker turning 25 times a second, filmed at 30 frames a second, looks exactly like one turning 5 times a second the other way, so no software can tell them apart. Gauge refuses when the marker turns about half a turn or more between frames, states its assumption in every rotation answer, and the advice is the same: film fast rotation in slow motion.
+- A growth percentage is only as good as the outline: SAM's mask can be a few pixels generous, which matters most for small objects (the quoted uncertainty includes an allowance for it). Area also changes when the object moves toward the camera.
 - The reference object must be in the same plane as the motion (perspective is not corrected).
 - Answers depend on SAM finding the object; results can vary slightly between runs, which is why tracking is cached.
 - Gauge is a measurement instrument, not a coach or an analyzer of people.

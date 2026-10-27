@@ -118,6 +118,32 @@ export function chartSpecs(tool: string, chart: Record<string, unknown> | undefi
     }]
   }
 
+  if (tool === 'growth_over_time') {
+    const unit = typeof chart.t_unit === 'string' ? chart.t_unit : 's'
+    const real = chart.real_time === true
+    const fitName = typeof chart.fit_name === 'string' ? chart.fit_name : 'trend'
+    return [{
+      title: `Size over time, with the ${fitName} trend`,
+      xLabel: real ? `real time (${unit})` : 'time in the video (s)',
+      yLabel: typeof chart.y_label === 'string' ? chart.y_label : 'size',
+      data: decimate(rows(t, { measured: arr(chart.measured), fitted: arr(chart.fitted) })),
+      series: [{ key: 'measured', label: 'measured size', color: COLORS.slate, kind: 'dots' },
+        { key: 'fitted', label: `${fitName} trend`, color: COLORS.accent, kind: 'line' }],
+      markers: [], areas: [],
+    }]
+  }
+
+  if (tool === 'rotation_rate') {
+    const from = used('used_from'), to = used('used_to')
+    return [{
+      title: 'Turns completed over time, with the fitted line', xLabel: 'time (s)', yLabel: 'turns (revolutions)',
+      data: decimate(rows(t, { measured: arr(chart.turns), fitted: arr(chart.fitted) })),
+      series: [{ key: 'measured', label: 'marker angle (counted in turns)', color: COLORS.slate, kind: 'dots' },
+        { key: 'fitted', label: 'steady rotation', color: COLORS.accent, kind: 'line' }],
+      markers: [], areas: from != null && to != null ? [{ x1: from, x2: to, label: 'used for the fit' }] : [],
+    }]
+  }
+
   if (tool === 'count_objects' || tool === 'line_crossings') {
     const cum = arr(chart.cumulative)
     if (!cum) return []

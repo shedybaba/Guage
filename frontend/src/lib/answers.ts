@@ -5,9 +5,17 @@ export const UNITS: Record<string, { value: string; label: string }[]> = {
   mass: [{ value: 'kg', label: 'kg' }, { value: 'g', label: 'g' }, { value: 'lb', label: 'lb' }],
   angle: [{ value: 'degrees', label: 'degrees' }, { value: 'rad', label: 'radians' }],
   time: [{ value: 's', label: 's' }, { value: 'ms', label: 'ms' }],
+  duration: [{ value: 'h', label: 'hours' }, { value: 'day', label: 'days' }, { value: 'min', label: 'minutes' }, { value: 's', label: 'seconds' }, { value: 'week', label: 'weeks' }],
 }
 
 export const defaultUnit = (dimension: string | null): string => (dimension && UNITS[dimension]?.[0].value) || ''
+
+/** A duration in seconds shown in the biggest unit that keeps the number at 1 or more (259200 s -> 3 days). */
+export function niceDuration(seconds: number): { value: number; unit: string } {
+  const steps: [string, number][] = [['week', 604800], ['day', 86400], ['h', 3600], ['min', 60]]
+  const hit = steps.find(([, f]) => seconds >= f)
+  return hit ? { value: seconds / hit[1], unit: hit[0] } : { value: seconds, unit: 's' }
+}
 
 export type Parsed = { ok: true; value: number } | { ok: false; error: string }
 

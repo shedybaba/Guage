@@ -18,7 +18,7 @@ from .formatting import AllowedNumbers, find_unsupported_numbers
 from .llm import LLMError, Usage
 from .tools.registry import (ASKS, AVAILABLE, KNOWN_VALUE_KEYS, OUTPUT_LABELS, REFERENCES, TOOLS, VALUE_NAMES,
                              MissingInput, _ask, missing_inputs, supported_summary)
-from .units import QUANTITIES, UnitError, convert, plausible, verify_quote
+from .units import QUANTITIES, SI_NAME, UnitError, convert, plausible, verify_quote
 
 MAX_PHRASE_WORDS = 4
 MAX_PHRASES = 3
@@ -115,7 +115,7 @@ def plan_schema():
                 "type": "object", "additionalProperties": False, "required": ["role", "phrases"],
                 "properties": {"role": {"type": "string", "enum": ["main", "reference"]},
                                "phrases": {"type": "array", "items": {"type": "string"}}}}},
-            "quantity": {"anyOf": [{"type": "string", "enum": ["acceleration", "speed", "average_speed"]},
+            "quantity": {"anyOf": [{"type": "string", "enum": ["acceleration", "speed", "average_speed", "height", "width", "area"]},
                                    {"type": "null"}]},
             "values": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False, "required": ["name", "value", "unit", "quote"],
@@ -160,13 +160,16 @@ oscillation dies away, damping or decay are "damping".
 "red ball", "metal spring", "steel ball"), not by its role or what the user called it if that is not what it looks like. \
 Each phrase is ONE short noun phrase of one to three words. Put the best phrase first, then up to two other ways to name \
 the SAME object. Never use commas, "and", "or", lists, verbs or negations. role "main" is what is measured; role \
-"reference" is an object of known size used as a ruler (only if the user mentions one). Give one target per kind of object: \
+"reference" is an object of known size used as a ruler (only if the user mentions one). For rotation_rate the main target is the small marker that goes round (a "red sticker", a "white dot", a "blade tip"), \
+not the whole fan or wheel. Give one target per kind of object: \
 for several identical objects, one phrase finds them all.
 4. values: ONLY numbers the user wrote or said in the question. Copy the number and the unit exactly as stated ("50", "cm"), \
 and put the exact words they came from in quote. If the user gave no number, return an empty list. Never convert units, \
-never compute, never guess a number. Allowed names: {', '.join(VALUE_NAMES)}.
-5. quantity (velocity_acceleration only): "acceleration", "speed" (a speed at a given time, or the top speed) or \
-"average_speed". Otherwise null. If the user names a time for a speed, give it as the value "time".
+never compute, never guess a number. Allowed names: {', '.join(VALUE_NAMES)}. For a time-lapse, "real_duration" is the real time the WHOLE video covers \
+("the video covers 3 days") and "frame_interval" is the real time between two frames ("a photo every 10 minutes").
+5. quantity: for velocity_acceleration: "acceleration", "speed" (a speed at a given time, or the top speed) or \
+"average_speed"; if the user names a time for a speed, give it as the value "time". For growth_over_time: "height" if the \
+user asks how tall or high it got, "width" for how wide or spread, otherwise "area". For every other tool null.
 6. line (line_crossings only): the orientation and where the line is as a fraction of the picture width (vertical) or height \
 (horizontal), 0 to 1 (0.5 is the middle). Use null for the position if the user did not say. For other tools use null.
 7. everything_moves_together: true only if the user says the objects are on a conveyor or belt that carries them all.
@@ -316,7 +319,7 @@ def normalise_plan(raw, question, *, video_size=None, known_values=None, previou
             if name in plan.values and plan.values[name].source == "question" and abs(plan.values[name].value - val) > 1e-9:
                 notes.append(f"You gave a {name.replace('_', ' ')} in the question and as a setting; the setting "
                              f"({val:g}) is used.")
-            unit = {"length": "m", "mass": "kg", "angle": "degrees", "time": "s"}[QUANTITIES[name][0]]
+            unit = SI_NAME[QUANTITIES[name][0]]
             plan.values[name] = ValueEntry(name, float(val), unit, f"{val:g} {unit}", "", "given", True,
                                            not plausible(name, float(val)))
 
@@ -331,7 +334,10 @@ def normalise_plan(raw, question, *, video_size=None, known_values=None, previou
     if spec.objects and not plan.main_phrases:
         plan.missing.append(_ask("object"))
 
-    plan.quantity = raw.get("quantity") if tool == "velocity_acceleration" else None
+    allowed_q = {"velocity_acceleration": ("acceleration", "speed", "average_speed"), "growth_over_time": ("height", "width", "area")}
+    plan.quantity = raw.get("quantity") if raw.get("quantity") in allowed_q.get(tool, ()) else None
+    if tool == "growth_over_time" and plan.quantity is None:
+        plan.quantity = "area"
     if tool == "velocity_acceleration":
         if plan.quantity is None:
             plan.quantity = ("speed" if "speed" in plan.outputs else "average_speed" if "average_speed" in plan.outputs

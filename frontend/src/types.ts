@@ -81,6 +81,7 @@ export type Result = MeasurementResult | UnsupportedResult | NoResult
 export interface NeedMissing { name: string; question: string; dimension: string | null }
 export interface NeedConfirm {
   name: string; said: string; value: number; unit: string; reason: string; question: string
+  dimension?: string
 }
 export interface Needs {
   missing: NeedMissing[]

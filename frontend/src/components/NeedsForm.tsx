@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { defaultUnit, parseNumber, UNITS } from '../lib/answers'
+import { defaultUnit, niceDuration, parseNumber, UNITS } from '../lib/answers'
 import type { AnswerBody } from '../api'
 import type { Needs } from '../types'
 
@@ -12,8 +12,9 @@ const dimensionOf = (unit: string): string | null =>
 export function NeedsForm({ needs, onSubmit }: { needs: Needs; onSubmit: (a: AnswerBody) => Promise<void> }) {
   const fields: Field[] = [
     ...needs.confirm.map((c) => {
-      const dim = dimensionOf(c.unit)
-      return { name: c.name, label: c.question, dimension: dim, prefill: String(Number(c.value.toPrecision(6))), unit: c.unit || defaultUnit(dim), confirm: true, reason: c.reason }
+      const dim = c.dimension ?? dimensionOf(c.unit)
+      const nice = dim === 'duration' ? niceDuration(c.value) : { value: c.value, unit: c.unit || defaultUnit(dim) }
+      return { name: c.name, label: c.question, dimension: dim, prefill: String(Number(nice.value.toPrecision(6))), unit: nice.unit, confirm: true, reason: c.reason }
     }),
     ...needs.missing.map((m) => ({ name: m.name, label: m.question, dimension: m.dimension, prefill: '', unit: defaultUnit(m.dimension), confirm: false })),
   ]
