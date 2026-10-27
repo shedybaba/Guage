@@ -76,7 +76,7 @@ Every step is written to a visible log ("How Gauge checked its work"), live whil
 - **Rendered clips with known answers, through the real chain.** A red dot circling at exactly 75 rpm was read as 75.000 ± 0.008 rpm (SAM found the sticker, a Fourier check agreed). A growing plant drawn 77% taller was read as +69.5%: the gap is SAM's outline being a few pixels generous at the start, which is why the growth uncertainty includes an edge allowance.
 - **Real clips second.** On two real pendulum videos the pendulum tool, the spring tool and the velocity tool agree with each other (frequency = 1/period exactly; peak speed from local fits within 0.4% and 4% of amplitude × ω). The line-crossing counter, with the line at the pendulum's rest position, finds the same swing timing as the pendulum tool (two crossings per swing). A Newton's cradle video gives exactly 7 objects.
 - **Failure paths are tested too:** a still object jittering by 0.1 px is *not* reported as a pendulum; an object that is hidden for 50 frames is re-acquired within 0.3 px of where SAM's own track says it is.
-- **Tests:** 475 backend tests and 89 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
+- **Tests:** 487 backend tests and 90 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
 
 ## Limits (stated plainly)
 
@@ -136,12 +136,12 @@ The repository has a `Dockerfile` (it builds the website, then runs the Python s
 
 1. Create a project from this repository. Railway builds the `Dockerfile`.
 2. Add a **volume** mounted at `/data` (videos, results and the SQLite database live there).
-3. Set the variable `MODEL_API_KEY`. Recommended for a public site: `GAUGE_DAILY_SAM_FRAMES=30000` to cap daily spend.
+3. Set the variable `MODEL_API_KEY`. Optional spend cap for a public site: `GAUGE_DAILY_SAM_FRAMES=30000` (the default is 100,000 frames a day, about 20 US dollars).
 4. Generate a public domain. The site must be served over HTTPS for the microphone to work (browsers require it); Railway domains are.
 
 Other settings, all optional, are listed in `.env.example` (upload size, concurrent jobs, hourly limits, job timeout).
 
-Public deployments have cost guards that apply to everyone together: 300 MB uploads, 15,000 frames per video, 2 jobs working and 12 waiting, 120 questions an hour, a daily SAM frame budget and a 15 minute timeout per job.
+Public deployments have cost guards. For everyone together: 300 MB uploads, 15,000 frames per video, 2 jobs working and 12 waiting, 120 questions an hour, a daily SAM frame budget and a 15 minute timeout per job. For each visitor, per hour: 40 questions, 15 uploads and 60 voice questions.
 
 ## Repository layout
 
