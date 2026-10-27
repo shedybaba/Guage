@@ -119,12 +119,21 @@ async def _models_request(with_key: bool) -> dict:
     return out
 
 
+async def _egress_ip() -> str | None:
+    """The public address this machine's requests leave from, as a public echo service sees it (nothing is sent to it)."""
+    try:
+        async with httpx.AsyncClient(timeout=8) as c:
+            return (await c.get("https://api.ipify.org")).text.strip()[:64]
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def collect() -> dict:
     base = urlsplit(config.META_BASE_URL)
     host = base.hostname
     loop = asyncio.get_running_loop()
     dns, tls = await asyncio.gather(loop.run_in_executor(None, _dns, host), loop.run_in_executor(None, _tls, host))
-    with_key, without_key = await asyncio.gather(_models_request(True), _models_request(False))
+    with_key, without_key, egress = await asyncio.gather(_models_request(True), _models_request(False), _egress_ip())
     return {
         "machine": {"hostname": socket.gethostname(), "system": platform.platform(), "python": platform.python_version(),
                     "openai_sdk": openai.__version__, "httpx": httpx.__version__},
@@ -134,6 +143,7 @@ async def collect() -> dict:
                        "asr_url": config.META_BASE_URL + "/asr/transcribe",
                        "language_model": config.SPARK_MODEL, "sam_model": config.SAM_MODEL},
         "environment": _env(),
+        "egress_ip": egress,
         "dns": dns,
         "tls": tls,
         "models_request_with_key": with_key,
