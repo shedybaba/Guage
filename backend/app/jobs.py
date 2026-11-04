@@ -17,11 +17,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import camera, runner, video
+from . import camera, phrases, runner, sam, video
 from .explain import build_facts, explain
 from .llm import LLMError, Usage
 from .planner import Plan, PlannerError, make_plan
-from .quality import track_objects_with_checks
+from .quality import LogEntry, track_objects_with_checks
 from .store import jsonable
 from .tools.registry import KNOWN_VALUE_KEYS, used_values
 from .units import QUANTITIES
@@ -83,11 +83,12 @@ def clean_known_values(raw):
 class JobRunner:
     """Runs jobs in the background. llm: SparkLLM. tracker_factory(video_row, on_progress) -> SAM tracker (async)."""
 
-    def __init__(self, store, data_dir, llm, tracker_factory, keyframes_fn=None, limits=None, camera_fn=None):
+    def __init__(self, store, data_dir, llm, tracker_factory, keyframes_fn=None, limits=None, camera_fn=None, probe_fn=None):
         self.store, self.data_dir, self.llm = store, Path(data_dir), llm
         self.tracker_factory = tracker_factory
         self.keyframes_fn = keyframes_fn or self._default_keyframes
         self.camera_fn = camera_fn or self._default_camera
+        self.probe_fn = probe_fn  # async (frames, names) -> {name: objects found on a sample picture}; None = no pre-check
         self.limits = limits or Limits()
         self._sem = asyncio.Semaphore(self.limits.max_active)
         self._tasks = {}
@@ -166,6 +167,25 @@ class JobRunner:
         self.store.update_job(job_id, status="failed", message=message, error=code)
         self.store.add_event(job_id, "error", message, {"code": code})
 
+    async def _pick_names(self, vrow, plan):
+        """The object names to track, best first: each candidate is tried on one sample picture (cents, not a video pass)."""
+        planned = list(plan.main_phrases)
+        if self.probe_fn is None or not planned:
+            return planned, None
+        try:
+            cands = phrases.candidates(planned)
+            if any(sam.load_cached(vrow["key"], p) for p in cands):
+                return planned, None  # already tracked once: a cached name costs nothing, no need to test
+            frames = await asyncio.to_thread(self.keyframes_fn, vrow)
+            counts = await self.probe_fn(frames, cands)
+            many = plan.tool in ("count_objects", "line_crossings", "collision_momentum")
+            chosen = phrases.choose(planned, counts, prefer_many=many)
+            text = phrases.describe(planned, counts, chosen)
+            return chosen, (LogEntry("names", text, True if counts.get(chosen[0]) else None) if text else None)
+        except Exception:  # noqa: BLE001 - never let the pre-check stop a question
+            log.warning("name pre-check failed", exc_info=True)
+            return planned, None
+
     def _default_keyframes(self, video_row):
         cache = self.data_dir / "videos" / video_row["id"] / "keyframes.json"
         if cache.exists():
@@ -242,8 +262,13 @@ class JobRunner:
 
         self._emit(job_id, "status", "Finding and following the object in every frame", status="tracking", progress=0.10)
         tracker = await self.tracker_factory(vrow, on_progress)
-        checked = await track_objects_with_checks(tracker, plan.main_phrases, total, size, check_camera=plan.check_camera,
+        names, names_entry = await self._pick_names(vrow, plan)
+        if names_entry:
+            on_log(names_entry)
+        checked = await track_objects_with_checks(tracker, names, total, size, check_camera=plan.check_camera,
                                                   on_log=on_log)
+        if names_entry:
+            checked.log.insert(0, names_entry)  # (insert, not append: the live event for it has already been sent)
         if not checked.tracks:
             advice = checked.advice
             result = {"kind": "no_result", "answerable": False, "question": job["question"],

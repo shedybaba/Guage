@@ -159,7 +159,9 @@ oscillation dies away, damping or decay are "damping".
 3. targets: the objects an object detector must find. Name each as it LOOKS in the frames you are shown ("glass marble", \
 "red ball", "metal spring", "steel ball"), not by its role or what the user called it if that is not what it looks like. \
 Each phrase is ONE short noun phrase of one to three words. Put the best phrase first, then up to two other ways to name \
-the SAME object. Never use commas, "and", "or", lists, verbs or negations. role "main" is what is measured; role \
+the SAME object. For pendulum_period and oscillation_frequency only, one of the other names may be a different clearly \
+visible part that moves in step with the main object (for example "spring" for a cart on a spring), because a detector \
+sometimes misses a plain box or device. Never use commas, "and", "or", lists, verbs or negations. role "main" is what is measured; role \
 "reference" is an object of known size used as a ruler (only if the user mentions one). For rotation_rate the main target is the small marker that goes round (a "red sticker", a "white dot", a "blade tip"), \
 not the whole fan or wheel. Give one target per kind of object: \
 for several identical objects, one phrase finds them all.

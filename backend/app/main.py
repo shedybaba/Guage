@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Str
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, sam, transcribe, video, visitors
+from . import config, phrases, sam, transcribe, video, visitors
 from .jobs import ALLOWED_KNOWN, JobRunner, Limits, SubmitError
 from .store import TERMINAL, Store, new_id
 from .tools.registry import KNOWN_VALUE_KEYS
@@ -148,8 +148,11 @@ def create_app(store=None, runner=None, data_dir=None, frontend_dir=None, transc
             except RuntimeError:  # no MODEL_API_KEY: stay up so /api/health can say so, and fail questions plainly
                 log.error("MODEL_API_KEY is not set: the site will run, but every question will fail until it is.")
                 model_client = NoKeyClient()
+            probe = None
+            if not isinstance(model_client, NoKeyClient):
+                probe = lambda frames, names: phrases.probe_counts(model_client, frames, names)  # noqa: E731
             app.state.runner = JobRunner(app.state.store, data_dir, SparkLLM(model_client),
-                                         SamTrackerFactory(app.state.store, data_dir), limits=limits_from_env())
+                                         SamTrackerFactory(app.state.store, data_dir), limits=limits_from_env(), probe_fn=probe)
         yield
         await app.state.runner.shutdown()
         if store is None:
