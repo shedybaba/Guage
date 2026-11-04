@@ -6,7 +6,8 @@ results can vary slightly between runs.
 
 ## Before recording (10 minutes)
 
-- Use clips you are free to show. Film your own if you can: phone propped still, object fully visible, good light, slow motion for anything fast.
+- Footage: if you have no clips of your own, use the freely licensed ones in the table at the end of this file (all from Wikimedia Commons). Show the credit line on screen or in the video description. Film your own if you can: phone propped still, object fully visible, good light, slow motion for anything fast.
+- Tracking by SAM can take from 15 seconds to several minutes depending on Meta's load (one run took 8 minutes). Run every question in advance so it is cached; a cached question answers in about 15 seconds.
 - Run every question once beforehand so tracking is cached and the take is fast. Keep a second browser tab with the finished result as a safety net.
 - Quiet room, microphone close. Test the microphone button once (a mis-hear on camera is fine: it shows why you check the words).
 - Close other tabs and notifications. Browser zoom at 110% so the numbers are readable.
@@ -44,10 +45,25 @@ Show `/developers` for two seconds.
 - **A result looks odd:** read the warnings on screen out loud. Honest warnings are the point of the product.
 - **Do not** edit numbers, splice answers from different runs, or hide a failure.
 
-## Clips still worth filming
+## Footage that was tested on the live site (Nov 4)
 
-- A mass on a spring (known mass, spring held still, slow motion if you can): frequency and spring constant.
-- Parts or any objects moving across the frame (counting and a rate per minute). A belt, a tray, or a time-lapse works.
-- A dropped ball next to a ruler or metre stick, filmed in slow motion: free fall and g.
-- A fan or wheel with a sticker on it, filmed in slow motion if it is fast: rotation speed in rpm.
-- A time-lapse of a plant, dough rising or anything that slowly grows (say how long the clip covers): growth.
+Files are in `samples/` (git-ignored, never committed). Say the credit on screen if the clip appears in the video.
+
+| Clip file | What it is and credit | Question to ask | Result seen |
+|---|---|---|---|
+| `dl_p60_close.mp4` | Close-up of a 60 cm pendulum, cut from "Fadenpendelgeschwindigkeit (2 grad).webm" by Rhetos, CC BY-SA 4.0 (Wikimedia Commons) | "What is the swing period of the pendulum?" then "What value of g does that give? The string is 0.60 metres." | T = 1.59 ± 0.03 s (the video's own narration says about 1.54 s); g = 9.4 ± 0.3 m/s², consistent with 9.81. The best accuracy showcase |
+| `dl_oscillator.mp4` | Cart on a spring with a ruler, "Oscillatory motion acceleration.ogv" by Pieter Kuiper (Wikimedia Commons, attribution licence) | "What is the oscillation frequency?" then "What is the spring constant?" (Gauge pauses and asks for the mass) | f = 0.432 ± 0.004 Hz; the peaks in the data are 2.3 s apart, which agrees. The flat turning points are a real wave that is not a perfect sine, and the answer says the fit is only fair |
+| `newtons_cradle.mp4`, `pendulum.mp4`, `pendulum2.mp4` | The first clips used during development | "How many balls are there?" (7); "What is the swing period?" (0.858 s and 1.180 s) | see README |
+| `dl_lentil.mp4` | Lentil microgreens time-lapse, CC BY 2.0 (Wikimedia Commons) | "How much did the sprouts grow?" | Several sprouts are tracked; Gauge measures the one seen in most frames and says it ignored the others. Weak as a demo |
+
+Known limits found while testing (say them if asked, do not hide them):
+- Dense scenes with more than 16 objects (a bottling line with a panning camera) cannot be counted: SAM follows at most 16 objects per frame.
+- Tiny, blurred objects (a ball a few pixels across in a dark room) are lost, and Gauge answers "no fall was found" instead of a number.
+- A clip filmed from a moving or zooming camera is reported, not corrected.
+
+## Still worth filming (if there is time)
+
+- A mass on a spring with a known mass, slow motion: frequency and spring constant.
+- Parts moving across the frame on a belt: count and rate per minute.
+- A dropped ball next to a metre stick, slow motion: free fall and g.
+- A fan or wheel with a sticker on it: rotation speed in rpm.
