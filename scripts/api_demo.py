@@ -20,7 +20,7 @@ ap.add_argument("--base", default="http://localhost:8000")
 ap.add_argument("--video-id", help="reuse an uploaded video")
 ap.add_argument("--answer", action="append", default=[], metavar="NAME=VALUEunit", help="e.g. string_length=50cm")
 args = ap.parse_args()
-c = httpx.Client(base_url=args.base, timeout=120)
+c = httpx.Client(base_url=args.base, timeout=httpx.Timeout(120, read=None))
 
 
 def stream(job_id):

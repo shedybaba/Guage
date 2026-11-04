@@ -83,11 +83,14 @@ def clean_known_values(raw):
 class JobRunner:
     """Runs jobs in the background. llm: SparkLLM. tracker_factory(video_row, on_progress) -> SAM tracker (async)."""
 
-    def __init__(self, store, data_dir, llm, tracker_factory, keyframes_fn=None, limits=None, camera_fn=None, probe_fn=None):
+    def __init__(self, store, data_dir, llm, tracker_factory, keyframes_fn=None, limits=None, camera_fn=None, probe_fn=None,
+                 probe_frames_fn=None):
         self.store, self.data_dir, self.llm = store, Path(data_dir), llm
         self.tracker_factory = tracker_factory
         self.keyframes_fn = keyframes_fn or self._default_keyframes
         self.camera_fn = camera_fn or self._default_camera
+        # the sample pictures for the name pre-check are bigger than the planner's thumbnails: SAM misses small objects
+        self.probe_frames_fn = probe_frames_fn or (self._default_probe_frames if keyframes_fn is None else keyframes_fn)
         self.probe_fn = probe_fn  # async (frames, names) -> {name: objects found on a sample picture}; None = no pre-check
         self.limits = limits or Limits()
         self._sem = asyncio.Semaphore(self.limits.max_active)
@@ -176,7 +179,7 @@ class JobRunner:
             cands = phrases.candidates(planned)
             if any((c := sam.load_cached(vrow["key"], p)) and c.points for p in cands):  # a name already known to work
                 return planned, None  # already tracked once: a cached name costs nothing, no need to test
-            frames = await asyncio.to_thread(self.keyframes_fn, vrow)
+            frames = await asyncio.to_thread(self.probe_frames_fn, vrow)
             counts = await self.probe_fn(frames, cands)
             many = plan.tool in ("count_objects", "line_crossings", "collision_momentum")
             chosen = phrases.choose(planned, counts, prefer_many=many)
@@ -185,6 +188,10 @@ class JobRunner:
         except Exception:  # noqa: BLE001 - never let the pre-check stop a question
             log.warning("name pre-check failed", exc_info=True)
             return planned, None
+
+    @staticmethod
+    def _default_probe_frames(video_row):
+        return video.keyframes(video_row["prepared"], 3, width=1024)
 
     def _default_keyframes(self, video_row):
         cache = self.data_dir / "videos" / video_row["id"] / "keyframes.json"
