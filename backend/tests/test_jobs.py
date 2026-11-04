@@ -198,6 +198,15 @@ def test_a_scale_given_directly_skips_tracking_a_reference(env):
     assert abs(j["result"]["headline"]["value"] - 9.81) < 0.5
 
 
+def test_a_scale_given_directly_answers_the_missing_length_question(env):
+    store, tmp, vid = env
+    h = Harness(store, tmp)
+    j = job(store, run(h, vid, "drop without a name: what is g?"))  # no length said at all
+    assert j["status"] == "needs_input" and [m["name"] for m in j["needs"]["missing"]] == ["reference_length"]
+    done = job(store, run(h, vid, "drop without a name: what is g?", {"scale_m_per_px": 0.004, "scale_uncertainty_fraction": 0.01}))
+    assert done["status"] == "done" and abs(done["result"]["headline"]["value"] - 9.81) < 0.5
+
+
 # ------------------------------------------------------------ several objects and follow-ups
 
 def test_counting_works_through_the_same_pipeline(env):

@@ -18,6 +18,7 @@ ap.add_argument("clip")
 ap.add_argument("question")
 ap.add_argument("--base", default="http://localhost:8000")
 ap.add_argument("--video-id", help="reuse an uploaded video")
+ap.add_argument("--known", action="append", default=[], metavar="NAME=NUMBER", help="e.g. scale_m_per_px=0.0015")
 ap.add_argument("--answer", action="append", default=[], metavar="NAME=VALUEunit", help="e.g. string_length=50cm")
 args = ap.parse_args()
 c = httpx.Client(base_url=args.base, timeout=httpx.Timeout(120, read=None))
@@ -45,7 +46,7 @@ if not vid:
     r.raise_for_status()
     print("uploaded:", r.json())
     vid = r.json()["video_id"]
-job = c.post(f"/api/videos/{vid}/questions", json={"question": args.question}).json()["job_id"]
+job = c.post(f"/api/videos/{vid}/questions", json={"question": args.question, "known_values": {k: float(v) for k, v in (x.split("=") for x in args.known)}}).json()["job_id"]
 print(f"Q: {args.question}  (job {job})")
 stream(job)
 j = c.get(f"/api/jobs/{job}").json()

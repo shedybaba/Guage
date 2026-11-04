@@ -349,6 +349,8 @@ class JobRunner:
     def _needs(self, plan, known):
         """What must be answered before measuring: missing inputs, and numbers the user said that could not be checked."""
         missing = [vars(m) for m in plan.missing]
+        if known.get("scale_m_per_px"):  # a scale given directly answers the "how long is something" question
+            missing = [m for m in missing if m["name"] != "reference_length"]
         wanted = used_values(plan.tool, plan.outputs, plan.compare_with_ramp, plan.quantity)
         confirm = []
         for name, v in plan.values.items():
