@@ -27,3 +27,7 @@ data/
 *.mov
 *.webm
 *.m4v
+
+# The sample clips used in testing are published (credits in samples/README.md)
+!samples/*.mp4
+!samples/README.md
