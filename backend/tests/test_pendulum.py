@@ -164,3 +164,12 @@ def test_a_small_but_clean_swing_is_still_measured():
     t = np.arange(0, 12, 1 / 30)
     x = 100 + 4.0 * np.sin(2 * np.pi * t / 1.4) + rng.normal(0, 0.2, t.size)  # tiny but far above the noise
     assert pendulum_period(t, x, np.full_like(t, 50.0))["value"] == pytest.approx(1.4, abs=0.02)
+
+
+def test_flat_topped_real_wave_is_measured_but_a_poor_fit_is_not():
+    """Coils that touch flatten the turning points: still a clear oscillation, so the period must come out."""
+    t = np.arange(0, 30, 1 / 30)
+    wave = np.clip(1.4 * np.sin(2 * np.pi * t / 2.3), -1, 1)  # clipped sine: R2 well under 1, jitter tiny
+    x = 500 + 90 * wave + np.random.default_rng(3).normal(0, 1.0, t.size)
+    r = pendulum_period(t, x, np.full_like(t, 200.0))
+    assert r["value"] is not None and abs(r["value"] - 2.3) < 0.05

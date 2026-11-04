@@ -15,6 +15,7 @@ MIN_CYCLES = 2
 MIN_R2 = 0.9
 MIN_SNR = 6.0  # the fitted swing must be at least 6x the tracking noise, or it is not a swing
 MIN_R2_ACCEPT = 0.5  # and the fit must explain at least half of the motion
+SHAPE_R2 = 0.8  # a fit this good may be compared with the jitter alone (a real wave that is not a perfect sinusoid)
 WINDOW_CYCLES = 3  # swing detection looks at windows 3 periods long
 CLEAN_RESIDUAL = 0.2  # window is a clean swing if residual < 20% of its amplitude
 MIN_AMPLITUDE_FRACTION = 0.25  # ... and its amplitude is at least 25% of the biggest swing
@@ -161,9 +162,16 @@ def _honest_uncertainty(t0, s, popt, pcov, fitted):
     return max(parts), comps
 
 
-def no_clear_oscillation(popt, sse, n, r2):
-    """A sentence if the fit is not a real oscillation (noise always has some sine wave in it), else None."""
+def no_clear_oscillation(popt, sse, n, r2, residual=None):
+    """A sentence if the fit is not a real oscillation (noise always has some sine wave in it), else None.
+
+    The swing is compared with the TRACKING noise: with `residual` given, that is the frame-to-frame jitter of the
+    leftovers (second differences), so a wave that is real but not a perfect sinusoid (flat turning points when
+    coils touch) is not mistaken for noise; the fits explaining under 80% of the motion keep the strict test, and under half are refused.
+    """
     noise = (sse / max(n, 1)) ** 0.5
+    if residual is not None and len(residual) > 4 and r2 >= SHAPE_R2:
+        noise = min(noise, float(np.std(np.diff(np.asarray(residual, float), 2)) / np.sqrt(6)))
     amp = abs(float(popt[0]))
     if amp < MIN_SNR * noise or r2 < MIN_R2_ACCEPT:
         return (f"No clear oscillation was found: the object only moves by about {2 * amp:.1f} pixels back and forth "

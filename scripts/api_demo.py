@@ -46,7 +46,7 @@ if not vid:
     print("uploaded:", r.json())
     vid = r.json()["video_id"]
 job = c.post(f"/api/videos/{vid}/questions", json={"question": args.question}).json()["job_id"]
-print(f"Q: {args.question}  (job {job[:8]})")
+print(f"Q: {args.question}  (job {job})")
 stream(job)
 j = c.get(f"/api/jobs/{job}").json()
 if j["status"] == "needs_input" and args.answer:

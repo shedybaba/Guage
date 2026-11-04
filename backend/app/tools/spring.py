@@ -128,7 +128,7 @@ def oscillation_frequency(t, x, y, mass_kg=None, mass_uncertainty_kg=None, sprin
     ss_tot = float(np.sum((ss - ss.mean()) ** 2))
     r2 = 1 - sse / ss_tot if ss_tot > 0 else 0.0
     cycles = float(t0[-1] / T)
-    unclear = no_clear_oscillation(popt, sse, len(ss), r2)
+    unclear = no_clear_oscillation(popt, sse, len(ss), r2, residual=ss - _model(t0, *popt))
     if unclear:
         return _empty(unclear)
     dt = float(np.median(np.diff(t0)))

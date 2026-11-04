@@ -129,8 +129,22 @@ def size_series(points, object_id, timestamps, quantity):
     return t, np.array([pick(p) for p in pts], float)
 
 
+SINGLE_OBJECT_TOOLS = ("pendulum_period", "oscillation_frequency", "free_fall", "velocity_acceleration", "growth_over_time",
+                       "rotation_rate")
+
+
 def run_tool(plan, checked, info, scale):
     """Run the planned tool on the tracked objects. `scale` is a ScaleInfo or None."""
+    result = _run_tool(plan, checked, info, scale)
+    if plan.tool in SINGLE_OBJECT_TOOLS and len(checked.tracks) > 1 and isinstance(result, dict):
+        main = signals.pick_main_object([p for pts in checked.tracks.values() for p in pts])
+        result.setdefault("warnings", []).append(
+            f"Gauge found {len(checked.tracks)} matching objects and measured only one of them (object {main}, the one seen in "
+            "the most frames). The others were ignored; film or ask about a single object if you want a specific one.")
+    return result
+
+
+def _run_tool(plan, checked, info, scale):
     v = values_si(plan)
     points = [p for pts in checked.tracks.values() for p in pts]
     size = (info.width, info.height)
