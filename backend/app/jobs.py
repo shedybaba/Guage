@@ -174,7 +174,7 @@ class JobRunner:
             return planned, None
         try:
             cands = phrases.candidates(planned)
-            if any(sam.load_cached(vrow["key"], p) for p in cands):
+            if any((c := sam.load_cached(vrow["key"], p)) and c.points for p in cands):  # a name already known to work
                 return planned, None  # already tracked once: a cached name costs nothing, no need to test
             frames = await asyncio.to_thread(self.keyframes_fn, vrow)
             counts = await self.probe_fn(frames, cands)
