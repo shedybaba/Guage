@@ -4,18 +4,37 @@ A phrase is a short noun phrase naming ONE object ("pendulum bob"). Zero matches
 is a valid result (empty list), not an error. Results are cached per
 (file_id, phrase) on disk so follow-up questions and re-runs are not billed again.
 """
+import asyncio
 import gzip
 import hashlib
 import json
 from dataclasses import asdict, dataclass
 
+import meta_sam_parser._segmentation as _parser_segmentation
 import numpy as np
 import openai
 from meta_sam_parser import (FramePrompt, PromptBox, PromptObject, SegmentationBoxRecord,
-                             SegmentationMaskRecord, build_object_prompt, decode_mask_to_raster,
+                             SegmentationMaskRecord, build_object_prompt,
                              parse_responses_stream, video_segmentation_format)
 
+from . import maskstats
 from .config import DATA_DIR, SAM_MODEL
+
+
+def _light_mask_check(mask):
+    """Stand-in for the parser's own check of every mask while the stream is read.
+
+    The parser fully decodes and re-encodes each mask just to validate it, in pure Python, on the
+    server's main thread: on a clip with large masks that froze the whole server for minutes. Only
+    the cheap structural checks stay here; the one real decode happens later in `maskstats`, in
+    worker processes, and a mask that cannot be read there falls back to its box.
+    """
+    if not isinstance(mask.payload, str) or not mask.payload[:1] in ("!", "~"):
+        raise _parser_segmentation.InvalidSegmentationMaskError("Mask payload must start with ! or ~.")
+    return b""
+
+
+_parser_segmentation.decode_mask_to_raster = _light_mask_check
 
 
 @dataclass
@@ -42,28 +61,17 @@ class TrackResult:
     cached: bool = False  # True when served from the local cache (nothing was billed)
 
 
+def _mask_job(rec: SegmentationMaskRecord):
+    b, m = rec.bounds, rec.mask
+    return (m.encoding, m.payload, m.width, m.height, b.left, b.top, b.right, b.bottom)
+
+
 def _mask_stats(rec: SegmentationMaskRecord):
     """Centroid, area and length along the main axis of a box-local mask, in source-video pixels."""
-    raster = np.frombuffer(decode_mask_to_raster(rec.mask), dtype=np.uint8)
-    w, h = rec.mask.width, rec.mask.height
-    ys, xs = np.nonzero(raster.reshape(h, w))
-    if len(xs) == 0:
-        return None
-    b = rec.bounds
-    sx, sy = (b.right - b.left) / w, (b.bottom - b.top) / h  # mask may be scaled to the box
-    px, py = (xs + 0.5) * sx, (ys + 0.5) * sy
-    cx, cy = b.left + px.mean(), b.top + py.mean()
-    if len(xs) >= 3:
-        cov = np.cov(np.stack([px, py]))
-        axis = np.linalg.eigh(cov)[1][:, -1]  # direction of greatest spread
-        along = px * axis[0] + py * axis[1]
-        long_side = float(along.max() - along.min() + max(sx, sy))
-    else:
-        long_side = float(max(sx, sy))
-    return cx, cy, float(len(xs) * sx * sy), long_side
+    return maskstats.stats(_mask_job(rec))
 
 
-def _build_points(records) -> list:
+def _pair_records(records):
     boxes, masks = {}, {}
     for r in records:
         if r.frame is None:
@@ -73,15 +81,46 @@ def _build_points(records) -> list:
             boxes[key] = r
         elif isinstance(r, SegmentationMaskRecord):
             masks[key] = r
+    return boxes, masks
+
+
+def _points(boxes, masks, stats_by_key) -> list:
     points = []
     for key, b in sorted(boxes.items()):
-        stats = _mask_stats(masks[key]) if key in masks else None
+        stats = stats_by_key.get(key)
         cx, cy, area, long_side = stats or ((b.left + b.right) / 2, (b.top + b.bottom) / 2,
                                             (b.right - b.left) * (b.bottom - b.top),
                                             max(b.right - b.left, b.bottom - b.top))
         points.append(TrackPoint(key[0], key[1], b.left, b.top, b.right, b.bottom,
                                  b.confidence, cx, cy, area, long_side))
     return points
+
+
+def _build_points(records) -> list:
+    """Per-frame points, decoding every mask in this process (small results and tests)."""
+    boxes, masks = _pair_records(records)
+    return _points(boxes, masks, {k: maskstats.stats(_mask_job(m)) for k, m in masks.items() if k in boxes})
+
+
+async def _build_points_async(records) -> list:
+    """Per-frame points without blocking the server: big results are decoded in worker processes."""
+    boxes, masks = _pair_records(records)
+    keys = [k for k in masks if k in boxes]
+    jobs = [_mask_job(masks[k]) for k in keys]
+    pixels = sum(j[2] * j[3] for j in jobs)
+    if pixels < maskstats.PARALLEL_FROM_PIXELS:
+        results = await asyncio.to_thread(maskstats.stats_many, jobs)
+    else:
+        loop = asyncio.get_running_loop()
+        parts = maskstats.chunks(jobs, maskstats.workers())
+        try:
+            done = await asyncio.gather(*[loop.run_in_executor(maskstats.pool(), maskstats.stats_many, p)
+                                          for p in parts])
+            results = maskstats.merge(done, len(jobs))
+        except Exception:  # worker processes unavailable: same work in a thread (and a fresh pool next time)
+            maskstats.reset_pool()
+            results = await asyncio.to_thread(maskstats.stats_many, jobs)
+    return _points(boxes, masks, dict(zip(keys, results)))
 
 
 async def _events(stream, usage_out: dict, progress=None):
@@ -142,7 +181,7 @@ async def _run(client, file_id: str, text: str, metadata: dict, key: str, label:
 
     usage = usage_out.get("usage") or {}
     billed = usage.get("video_frames_processed") if isinstance(usage, dict) else None
-    result = TrackResult(label, _build_points(final.records), billed,
+    result = TrackResult(label, await _build_points_async(final.records), billed,
                          [d.message for d in final.diagnostics])
     p = _cache_file(key, label)
     p.parent.mkdir(parents=True, exist_ok=True)

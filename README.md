@@ -97,7 +97,7 @@ A handheld camera moves every pixel, so a still object seems to move and a swing
 - **Rendered clips with known answers, through the real chain.** A red dot circling at exactly 75 rpm was read as 75.000 ± 0.008 rpm (SAM found the sticker, a Fourier check agreed). A growing plant drawn 77% taller was read as +69.5%: the gap is SAM's outline being a few pixels generous at the start, which is why the growth uncertainty includes an edge allowance.
 - **Real clips second.** On two real pendulum videos the pendulum tool, the spring tool and the velocity tool agree with each other (frequency = 1/period exactly; peak speed from local fits within 0.4% and 4% of amplitude × ω). The line-crossing counter, with the line at the pendulum's rest position, finds the same swing timing as the pendulum tool (two crossings per swing). A Newton's cradle video gives exactly 7 objects. All the clips are in [`samples/`](samples/README.md) with their sources, the question to ask and the result Gauge gave, so you can upload them to the live site and check.
 - **Failure paths are tested too:** a still object jittering by 0.1 px is *not* reported as a pendulum; an object that is hidden for 50 frames is re-acquired within 0.3 px of where SAM's own track says it is.
-- **Tests:** 514 backend tests and 90 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
+- **Tests:** 517 backend tests and 90 frontend tests, none of which need the network (the model and SAM are replaced by fakes that behave like the real ones).
 
 ## Limits (stated plainly)
 
